@@ -1,4 +1,4 @@
-# app_treino.py (corrigido com st.cache_resource)
+# app_treino.py (corrigido com st.cache_resource e guia visual)
 """
 FitPro - App completo pronto para deploy
 - Spinner em operações de I/O (salvar/carregar)
@@ -11,7 +11,8 @@ FitPro - App completo pronto para deploy
 - Lógica de substituição de exercícios baseada em restrições.
 - Banco de exercícios expandido com categorias e alternativas.
 - Login persistente com cookies para não deslogar ao atualizar a página.
-- [NOVO] Uso de st.cache_resource para otimizar a conexão com Firebase.
+- Uso de st.cache_resource para otimizar a conexão com Firebase.
+- [NOVO] Guia visual com GIFs para cada exercício na tela "Meu Treino".
 """
 import os
 import re
@@ -20,6 +21,7 @@ import json
 import time
 import base64
 import logging
+import requests # Importação necessária
 from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -121,7 +123,6 @@ def compare_images_metric(img1: Image.Image, img2: Image.Image) -> Dict[str, Any
 # ---------------------------
 # Firebase initialization
 # ---------------------------
-# [ALTERADO] Adicionado st.cache_resource para otimizar a conexão
 @st.cache_resource
 def init_firebase():
     try:
@@ -244,6 +245,29 @@ EXERCISE_SUBSTITUTIONS = {
     'Elevação de Pernas': 'Prancha'
 }
 
+
+# ---------------------------
+# [NOVO] Função para buscar GIF de exercício
+# ---------------------------
+@st.cache_data(ttl=3600 * 24)  # Cache de 24 horas para não sobrecarregar
+def find_exercise_gif(exercise_name: str) -> Optional[str]:
+    """Busca por um GIF de exercício e retorna a URL."""
+    # Tenta encontrar a melhor URL de GIF para o exercício.
+    try:
+        # Usaremos uma API pública e simples para buscar imagens (limite de uso generoso)
+        # Mais robusto que scraping do google images
+        search_term = f"{exercise_name} exercise animated gif"
+        params = {"q": search_term, "key": "LIVDSRZULELA", "limit": 1}
+        response = requests.get("https://g.tenor.com/v1/search", params=params)
+        response.raise_for_status()
+        results = response.json()
+        if results['results']:
+            # Pega o GIF de tamanho médio
+            return results['results'][0]['media'][0]['gif']['url']
+    except Exception as e:
+        st.error(f"Não foi possível buscar o GIF para '{exercise_name}': {e}")
+        return None
+    return None
 
 # ---------------------------
 # Plan serialization helpers
@@ -732,7 +756,6 @@ def render_main():
 # ---------------------------
 # Page implementations
 # ---------------------------
-# ... (o restante do seu código permanece o mesmo) ...
 
 def render_dashboard():
     st.title("📊 Dashboard")
@@ -815,7 +838,9 @@ def render_questionario():
             st.success("Perfil salvo e plano de treino personalizado gerado com sucesso!")
             st.info("Acesse a página 'Meu Treino' para visualizar.")
 
-
+# ---------------------------
+# [ALTERADO] Função render_meu_treino com guia visual
+# ---------------------------
 def render_meu_treino():
     st.title("💪 Meu Treino")
     plano = st.session_state.get('plano_treino')
@@ -827,25 +852,53 @@ def render_meu_treino():
     st.info(
         f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
 
-    for nome, df in plano.items():
-        if df.empty: continue
+    for nome_treino, df_treino in plano.items():
+        if df_treino.empty: continue
+
+        # Card do treino
         st.markdown(f"""
             <div style="background: linear-gradient(90deg,#fff,#f7fafc); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.06);">
-                <h3 style="margin:0;">🏷️ {nome}</h3>
-                <p style="margin:0;color:#555;">{len(df)} exercício(s)</p>
+                <h3 style="margin:0;">🏷️ {nome_treino}</h3>
+                <p style="margin:0;color:#555;">{len(df_treino)} exercício(s)</p>
             </div>
         """, unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Loop para cada exercício dentro do treino
+        for _, row in df_treino.iterrows():
+            exercicio = row['Exercício']
+            series = row['Séries']
+            repeticoes = row['Repetições']
+            descanso = row['Descanso']
+
+            # Expander para cada exercício com o GIF
+            with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    gif_url = find_exercise_gif(exercicio)
+                    if gif_url:
+                        st.image(gif_url, caption=f"Execução de {exercicio}")
+                    else:
+                        st.info("Guia visual indisponível.")
+
+                with col2:
+                    st.markdown(f"##### 📋 **Instruções**")
+                    st.markdown(f"- **Séries:** `{series}`")
+                    st.markdown(f"- **Repetições:** `{repeticoes}`")
+                    st.markdown(f"- **Descanso:** `{descanso}` entre as séries")
+                    st.markdown("---")
+                    st.write(f"**Grupo Muscular:** {EXERCICIOS_DB.get(exercicio, {}).get('grupo', 'N/A')}")
+                    st.write(f"**Equipamento:** {EXERCICIOS_DB.get(exercicio, {}).get('equipamento', 'N/A')}")
+
+        # Gráfico de evolução de cargas para o treino
         hist = pd.DataFrame(st.session_state.get('historico_treinos', []))
         if not hist.empty:
-            exs = df['Exercício'].tolist()
+            exs = df_treino['Exercício'].tolist()
             df_plot = hist[hist['exercicio'].isin(exs)].copy()
             if not df_plot.empty:
                 df_plot['data'] = pd.to_datetime(df_plot['data'])
                 fig = px.line(df_plot, x='data', y='peso', color='exercicio', markers=True,
-                              title=f'Evolução de cargas - {nome}')
+                              title=f'Evolução de cargas - {nome_treino}')
                 st.plotly_chart(fig, use_container_width=True)
-
 
 def render_registrar_treino():
     st.title("📝 Registrar Treino")
