@@ -1,9 +1,8 @@
-# app_treino.py (Versão Final com Rede Social e Sistema de Seguir)
+# app_treino.py (Versão Final com Modo de Treino Interativo)
 """
 FitPro - App completo pronto para deploy
 - Spinner em operações de I/O (salvar/carregar)
 - Confirmações elegantes (st.dialog() quando disponível, fallback)
-- Cards visuais para treinos + gráfico por exercício
 - Calendário visual de treinos
 - Firebase (Auth + Firestore) via st.secrets["firebase_credentials"]
 - Compatibilidade Streamlit (st.rerun fallback)
@@ -13,7 +12,9 @@ FitPro - App completo pronto para deploy
 - Login persistente com cookies para não deslogar ao atualizar a página.
 - Uso de st.cache_resource para otimizar a conexão com Firebase.
 - Funcionalidade de Rede Social com posts, fotos, curtidas e comentários.
-- [NOVO] Sistema de Seguir/Deixar de Seguir usuários e Feed Personalizado.
+- Sistema de Seguir/Deixar de Seguir usuários e Feed Personalizado.
+- Interface da página "Meu Treino" com busca dinâmica de GIFs na internet.
+- [NOVO] Modo de Treino Interativo com checklist, timer de descanso e registro em tempo real.
 """
 import os
 import re
@@ -22,6 +23,7 @@ import json
 import time
 import base64
 import logging
+import requests  # Importação necessária para buscar GIFs
 from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -167,6 +169,13 @@ def ensure_session_defaults():
         'offline_mode': False,
         'confirm_excluir_foto': False,
         'foto_a_excluir': None,
+
+        # Variáveis para o Modo Treino
+        'workout_in_progress': False,
+        'current_workout_plan': None,
+        'current_exercise_index': 0,
+        'workout_log': [],
+        'set_timers': {},
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -175,13 +184,35 @@ def ensure_session_defaults():
 
 ensure_session_defaults()
 
+
+# ---------------------------
+# Função para buscar GIF de exercício
+# ---------------------------
+@st.cache_data(ttl=3600 * 24)  # Cache de 24 horas
+def find_exercise_gif(exercise_name: str) -> Optional[str]:
+    """Busca por um GIF de exercício e retorna a URL."""
+    try:
+        search_term = f"{exercise_name} exercise animated gif"
+        params = {"q": search_term, "key": "LIVDSRZULELA", "limit": 1}
+        response = requests.get("https://g.tenor.com/v1/search", params=params)
+        response.raise_for_status()
+        results = response.json()
+        if results['results']:
+            return results['results'][0]['media'][0]['gif']['url']
+    except Exception:
+        return None
+    return None
+
+
 # ---------------------------
 # Banco de Exercícios Expandido
 # ---------------------------
 EXERCICIOS_DB = {
     # Pernas
     'Agachamento com Barra': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra',
-                               'restricoes': ['Lombar', 'Joelhos']},
+                              'restricoes': ['Lombar', 'Joelhos']},
+    'Agachamento com Halteres': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres',
+                                 'restricoes': ['Joelhos']},
     'Agachamento Goblet': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos']},
     'Leg Press 45°': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
     'Cadeira Extensora': {'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
@@ -194,7 +225,7 @@ EXERCICIOS_DB = {
     'Supino Reto com Barra': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros']},
     'Supino Reto com Halteres': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': []},
     'Supino Inclinado com Halteres': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres',
-                                       'restricoes': []},
+                                      'restricoes': []},
     'Crucifixo com Halteres': {'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
     'Flexão de Braço': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos']},
 
@@ -202,15 +233,15 @@ EXERCICIOS_DB = {
     'Barra Fixa': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': []},
     'Puxada Alta (Lat Pulldown)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
     'Remada Curvada com Barra': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra',
-                                   'restricoes': ['Lombar']},
+                                 'restricoes': ['Lombar']},
     'Remada Sentada (máquina)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
     'Remada Unilateral (Serrote)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': []},
 
     # Ombros
     'Desenvolvimento Militar com Barra': {'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra',
-                                             'restricoes': ['Lombar', 'Ombros']},
+                                          'restricoes': ['Lombar', 'Ombros']},
     'Desenvolvimento com Halteres (sentado)': {'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres',
-                                                  'restricoes': []},
+                                               'restricoes': []},
     'Elevação Lateral': {'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
     'Elevação Frontal': {'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
 
@@ -221,16 +252,16 @@ EXERCICIOS_DB = {
 
     # Tríceps
     'Tríceps Testa': {'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres',
-                         'restricoes': ['Cotovelos']},
+                      'restricoes': ['Cotovelos']},
     'Tríceps Pulley': {'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
     'Mergulho no Banco': {'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal',
-                             'restricoes': ['Ombros', 'Punhos']},
+                          'restricoes': ['Ombros', 'Punhos']},
 
     # Core
     'Prancha': {'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': []},
     'Abdominal Crunch': {'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': []},
     'Elevação de Pernas': {'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal',
-                              'restricoes': ['Lombar']},
+                           'restricoes': ['Lombar']},
 }
 
 EXERCISE_SUBSTITUTIONS = {
@@ -280,7 +311,7 @@ def serial_to_plan(serial: Optional[Dict[str, Any]]):
 # Firestore save/load (with spinner)
 # ---------------------------
 def salvar_dados_usuario_firebase(uid: str):
-    if not uid or uid == 'demo-uid':  # Não salvar dados do demo
+    if not uid or uid == 'demo-uid':
         return
     try:
         with st.spinner("💾 Salvando dados no Firestore..."):
@@ -388,57 +419,36 @@ def carregar_dados_usuario_firebase(uid: str):
 # ---------------------------
 # Funções para a Rede Social
 # ---------------------------
-@st.cache_data(ttl=120)  # Cache do feed por 2 minutos
+@st.cache_data(ttl=120)
 def carregar_feed_firebase(user_uid: str, limit=50):
-    """Carrega um feed personalizado com posts do usuário e de quem ele segue."""
     if not user_uid:
         return []
-
-    # Pega a lista de UIDs que o usuário segue
     following_uids = get_following_list(user_uid)
-
-    # O feed deve incluir os posts do próprio usuário
     uids_to_show = list(set(following_uids + [user_uid]))
-
-    # A consulta 'in' do Firestore exige uma lista não vazia
     if not uids_to_show:
         return []
-
     try:
-        # Usamos uma consulta 'IN' para buscar posts cujo 'user_uid' esteja na nossa lista
-        posts_ref = db.collection('posts') \
-            .where('user_uid', 'in', uids_to_show) \
-            .order_by('timestamp', direction=firestore.Query.DESCENDING) \
-            .limit(limit)
-
-        posts = [doc.to_dict() | {'id': doc.id} for doc in posts_ref.stream()]
-        return posts
+        posts_ref = db.collection('posts').where('user_uid', 'in', uids_to_show).order_by('timestamp',
+                                                                                          direction=firestore.Query.DESCENDING).limit(
+            limit)
+        return [doc.to_dict() | {'id': doc.id} for doc in posts_ref.stream()]
     except Exception as e:
         st.error(f"Erro ao carregar o feed: {e}")
         return []
 
 
 def salvar_post_firebase(user_uid, username, text_content=None, image_b64=None):
-    """Salva um novo post no Firestore."""
     if not user_uid or not username:
         st.error("Usuário não identificado para postar.")
         return False
     if not text_content and not image_b64:
         st.warning("O post precisa de texto ou imagem.")
         return False
-
     try:
-        post_data = {
-            'user_uid': user_uid,
-            'username': username,
-            'text_content': text_content,
-            'image_b64': image_b64,
-            'like_count': 0,
-            'comment_count': 0,
-            'timestamp': firestore.SERVER_TIMESTAMP
-        }
+        post_data = {'user_uid': user_uid, 'username': username, 'text_content': text_content, 'image_b64': image_b64,
+                     'like_count': 0, 'comment_count': 0, 'timestamp': firestore.SERVER_TIMESTAMP}
         db.collection('posts').add(post_data)
-        st.cache_data.clear()  # Limpa o cache para mostrar o novo post
+        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Erro ao salvar o post: {e}")
@@ -446,47 +456,33 @@ def salvar_post_firebase(user_uid, username, text_content=None, image_b64=None):
 
 
 def _toggle_like_transaction(transaction, post_ref, like_ref):
-    """Transação atômica para curtir/descurtir."""
     like_doc = like_ref.get(transaction=transaction)
     if like_doc.exists:
-        # Usuário já curtiu, então vamos descurtir
         transaction.delete(like_ref)
         transaction.update(post_ref, {'like_count': firestore.Increment(-1)})
     else:
-        # Usuário ainda não curtiu, vamos curtir
         transaction.set(like_ref, {'timestamp': firestore.SERVER_TIMESTAMP})
         transaction.update(post_ref, {'like_count': firestore.Increment(1)})
 
 
 def curtir_post(post_id, user_uid):
-    """Adiciona/remove um like de um post."""
     if not user_uid or not post_id: return
-
     post_ref = db.collection('posts').document(post_id)
     like_ref = post_ref.collection('likes').document(user_uid)
-
     db.run_transaction(lambda transaction: _toggle_like_transaction(transaction, post_ref, like_ref))
-    st.cache_data.clear()  # Limpa o cache para atualizar a contagem
+    st.cache_data.clear()
 
 
 def comentar_post(post_id, user_uid, username, text):
-    """Adiciona um comentário a um post."""
     if not all([user_uid, post_id, username, text]): return
-
     try:
         post_ref = db.collection('posts').document(post_id)
         comments_ref = post_ref.collection('comments')
-
-        comment_data = {
-            'user_uid': user_uid,
-            'username': username,
-            'text': text,
-            'timestamp': firestore.SERVER_TIMESTAMP
-        }
-
+        comment_data = {'user_uid': user_uid, 'username': username, 'text': text,
+                        'timestamp': firestore.SERVER_TIMESTAMP}
         comments_ref.add(comment_data)
         post_ref.update({'comment_count': firestore.Increment(1)})
-        st.cache_data.clear()  # Limpa o cache para mostrar o novo comentário
+        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Erro ao comentar: {e}")
@@ -495,30 +491,26 @@ def comentar_post(post_id, user_uid, username, text):
 
 @st.cache_data(ttl=300)
 def carregar_comentarios(post_id):
-    """Carrega os comentários de um post específico."""
     try:
         comments_ref = db.collection('posts').document(post_id).collection('comments').order_by('timestamp',
-                                                                                                 direction=firestore.Query.ASCENDING)
+                                                                                                direction=firestore.Query.ASCENDING)
         return [doc.to_dict() for doc in comments_ref.stream()]
     except Exception:
         return []
 
-# Funções para o sistema de Seguir/Seguidores
-@st.cache_data(ttl=600)  # Cache por 10 minutos
+
+@st.cache_data(ttl=600)
 def get_all_users():
-    """Busca uma lista de todos os usuários para a página de busca."""
     try:
         users_ref = db.collection('usuarios').stream()
-        # Retorna uma lista de dicionários, cada um com id e username
         return [{'id': user.id, 'username': user.to_dict().get('username', 'Usuário Anônimo')} for user in users_ref]
     except Exception as e:
         st.error(f"Erro ao buscar usuários: {e}")
         return []
 
 
-@st.cache_data(ttl=300)  # Cache por 5 minutos
+@st.cache_data(ttl=300)
 def get_following_list(user_uid: str) -> List[str]:
-    """Retorna uma lista de UIDs que o usuário está seguindo."""
     if not user_uid:
         return []
     try:
@@ -529,38 +521,25 @@ def get_following_list(user_uid: str) -> List[str]:
 
 
 def follow_user(follower_uid: str, followed_uid: str):
-    """Cria a relação 'seguir' entre dois usuários."""
     if not follower_uid or not followed_uid or follower_uid == followed_uid:
         return
-
-    # Usamos um batch para garantir que as duas operações ocorram juntas
     batch = db.batch()
-
-    # Adiciona o 'followed_uid' à sub-coleção 'following' do seguidor
     following_ref = db.collection('usuarios').document(follower_uid).collection('following').document(followed_uid)
     batch.set(following_ref, {'timestamp': firestore.SERVER_TIMESTAMP})
-
-    # Adiciona o 'follower_uid' à sub-coleção 'followers' de quem foi seguido
     followers_ref = db.collection('usuarios').document(followed_uid).collection('followers').document(follower_uid)
     batch.set(followers_ref, {'timestamp': firestore.SERVER_TIMESTAMP})
-
     batch.commit()
-    st.cache_data.clear()  # Limpa todo o cache para refletir a mudança
+    st.cache_data.clear()
 
 
 def unfollow_user(follower_uid: str, followed_uid: str):
-    """Remove a relação 'seguir' entre dois usuários."""
     if not follower_uid or not followed_uid:
         return
-
     batch = db.batch()
-
     following_ref = db.collection('usuarios').document(follower_uid).collection('following').document(followed_uid)
     batch.delete(following_ref)
-
     followers_ref = db.collection('usuarios').document(followed_uid).collection('followers').document(follower_uid)
     batch.delete(followers_ref)
-
     batch.commit()
     st.cache_data.clear()
 
@@ -578,20 +557,10 @@ def criar_usuario_firebase(email: str, senha: str, nome: str) -> (bool, str):
         user = auth.create_user(email=email, password=senha, display_name=nome)
         uid = user.uid
         db.collection('usuarios').document(uid).set({
-            'email': email,
-            'username': nome,
-            'dados_usuario': {'nome': nome},
-            'plano_treino': None,
-            'frequencia': [],
-            'historico_treinos': [],
-            'historico_peso': [],
-            'metas': [],
-            'fotos_progresso': [],
-            'medidas': [],
-            'feedbacks': [],
-            'ciclo_atual': None,
-            'role': None,
-            'password_hash': sha256(senha),
+            'email': email, 'username': nome, 'dados_usuario': {'nome': nome},
+            'plano_treino': None, 'frequencia': [], 'historico_treinos': [],
+            'historico_peso': [], 'metas': [], 'fotos_progresso': [], 'medidas': [],
+            'feedbacks': [], 'ciclo_atual': None, 'role': None, 'password_hash': sha256(senha),
             'data_criacao': datetime.now()
         })
         return True, "Usuário criado com sucesso!"
@@ -681,7 +650,6 @@ def check_notifications_on_open():
         if dados:
             st.session_state['plano_treino'] = gerar_plano_personalizado(dados, info['fase_atual'])
             notifs.append({'tipo': 'plano_ajustado', 'msg': 'Seu plano foi ajustado para a nova fase de treino!'})
-
     for t in (5, 10, 30, 50, 100):
         if num_treinos == t:
             notifs.append({'tipo': 'conquista', 'msg': f"🎉 Você alcançou {t} treinos!"})
@@ -727,7 +695,6 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
-
     if fase_atual:
         series_base, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
     else:
@@ -749,12 +716,10 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
                         candidatos_validos.append(substituto)
                 else:
                     candidatos_validos.append(ex_nome)
-
         candidatos = list(set(candidatos_validos))
         compostos = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto'][:n_compostos]
         isolados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto' and ex not in compostos][
                    :n_isolados]
-
         for ex in compostos + isolados:
             exercicios_selecionados.append(
                 {'Exercício': ex, 'Séries': series_base.split('-')[-1], 'Repetições': reps_base,
@@ -774,7 +739,7 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         plano['Treino A: Superiores (Foco Peito/Costas)'] = selecionar_exercicios(['Peito', 'Costas', 'Bíceps'], 3, 2)
         plano['Treino B: Inferiores (Foco Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
         plano['Treino C: Superiores (Foco Ombros/Braços)'] = selecionar_exercicios(['Ombros', 'Tríceps', 'Bíceps'], 2,
-                                                                                  3)
+                                                                                   3)
         plano['Treino D: Inferiores (Foco Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3)
     elif dias >= 5:
         plano['Treino A: Peito'] = selecionar_exercicios(['Peito'], 2, 2)
@@ -782,13 +747,11 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         plano['Treino C: Pernas'] = selecionar_exercicios(['Pernas'], 2, 3)
         plano['Treino D: Ombros'] = selecionar_exercicios(['Ombros'], 2, 2)
         plano['Treino E: Braços & Core'] = selecionar_exercicios(['Bíceps', 'Tríceps', 'Core'], 0, 4)
-
     for nome, exercicios in plano.items():
         if exercicios:
             plano[nome] = pd.DataFrame(exercicios)
         else:
             plano[nome] = pd.DataFrame()
-
     return plano
 
 
@@ -808,8 +771,7 @@ def render_auth():
                 if st.form_submit_button("👁️ Modo Demo"):
                     ok, msg = verificar_credenciais_firebase('demo', 'demo123')
                     if ok:
-                        st.success(msg)
-                        st.rerun()
+                        st.success(msg); st.rerun()
                     else:
                         st.error(msg)
             if st.form_submit_button("Entrar"):
@@ -818,8 +780,7 @@ def render_auth():
                 else:
                     ok, msg = verificar_credenciais_firebase(username.strip(), senha)
                     if ok:
-                        st.success(msg)
-                        st.rerun()
+                        st.success(msg); st.rerun()
                     else:
                         st.error(msg)
     with tab_cad:
@@ -843,14 +804,16 @@ def render_auth():
                 else:
                     ok, msg = criar_usuario_firebase(email.strip(), senha, nome.strip())
                     if ok:
-                        st.success(msg)
-                        st.info("Faça login agora.")
+                        st.success(msg); st.info("Faça login agora.")
                     else:
                         st.error(msg)
     st.stop()
 
 
 def render_main():
+    if st.session_state.get('workout_in_progress', False):
+        render_workout_session()
+        st.stop()
     check_notifications_on_open()
     st.sidebar.title("🏋️ FitPro")
     st.sidebar.write(f"👤 {st.session_state.get('usuario_logado')}")
@@ -858,13 +821,10 @@ def render_main():
         uid = st.session_state.get('user_uid')
         if uid:
             salvar_dados_usuario_firebase(uid)
-
         del cookies['user_uid']
-
         keys = list(st.session_state.keys())
         for k in keys:
-            if k != 'db':
-                del st.session_state[k]
+            if k != 'db': del st.session_state[k]
         st.rerun()
     st.sidebar.markdown("---")
     st.sidebar.subheader("Configurações")
@@ -889,26 +849,22 @@ def render_main():
                     st.toast(n['msg'])
                 except Exception:
                     st.info(n['msg'])
-
-    pages = ["Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino", "Registrar Treino", "Progresso", "Fotos",
-             "Comparar Fotos",
-             "Medidas", "Planejamento Semanal", "Metas", "Nutrição", "Busca", "Export/Backup"]
+    pages = ["Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino", "Registrar Treino",
+             "Progresso", "Fotos", "Comparar Fotos", "Medidas", "Planejamento Semanal", "Metas", "Nutrição", "Busca",
+             "Export/Backup"]
     if st.session_state.get('role') == 'admin':
         pages.append("Admin")
     page = st.selectbox("Navegação", pages)
-
     page_map = {
-        "Dashboard": render_dashboard, "Rede Social": render_rede_social,
-        "Buscar Usuários": render_buscar_usuarios,
-        "Questionário": render_questionario,
-        "Meu Treino": render_meu_treino, "Registrar Treino": render_registrar_treino,
-        "Progresso": render_progresso, "Fotos": render_fotos,
-        "Comparar Fotos": render_comparar_fotos, "Medidas": render_medidas,
-        "Planejamento Semanal": render_planner, "Metas": render_metas,
-        "Nutrição": render_nutricao, "Busca": render_busca,
+        "Dashboard": render_dashboard, "Rede Social": render_rede_social, "Buscar Usuários": render_buscar_usuarios,
+        "Questionário": render_questionario, "Meu Treino": render_meu_treino,
+        "Registrar Treino": render_registrar_treino,
+        "Progresso": render_progresso, "Fotos": render_fotos, "Comparar Fotos": render_comparar_fotos,
+        "Medidas": render_medidas,
+        "Planejamento Semanal": render_planner, "Metas": render_metas, "Nutrição": render_nutricao,
+        "Busca": render_busca,
         "Export/Backup": render_export_backup, "Admin": render_admin_panel,
     }
-
     render_func = page_map.get(page, lambda: st.write("Página em desenvolvimento."))
     render_func()
 
@@ -916,118 +872,181 @@ def render_main():
 # ---------------------------
 # Page implementations
 # ---------------------------
+def render_workout_session():
+    st.title("🔥 Treino em Andamento")
+    plano_atual = st.session_state['current_workout_plan']
+    idx_atual = st.session_state['current_exercise_index']
+    exercicio_atual = plano_atual[idx_atual]
+    nome_exercicio = exercicio_atual['Exercício']
+    series_str = exercicio_atual['Séries']
+    try:
+        num_series = int(str(series_str).split('-')[0])
+    except:
+        num_series = 3
+    progresso = (idx_atual + 1) / len(plano_atual)
+    st.progress(progresso, text=f"Exercício {idx_atual + 1} de {len(plano_atual)}")
+    with st.container(border=True):
+        col_gif, col_details = st.columns([2, 3])
+        with col_gif:
+            gif_url = find_exercise_gif(nome_exercicio)
+            if gif_url:
+                st.image(gif_url)
+            else:
+                st.text("GIF indisponível")
+        with col_details:
+            st.header(nome_exercicio)
+            st.markdown(
+                f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`")
+            st.markdown(f"**Descanso:** `{exercicio_atual['Descanso']}`")
+    st.markdown("---")
+    st.subheader("Registre suas séries")
+    for i in range(num_series):
+        set_key = f"set_{idx_atual}_{i}"
+        if set_key not in st.session_state:
+            st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
+        set_info = st.session_state[set_key]
+        cols = st.columns([1, 2, 2, 2])
+        with cols[0]:
+            completed = st.checkbox(f"Série {i + 1}", value=set_info['completed'], key=f"check_{set_key}")
+            if completed != set_info['completed']:
+                set_info['completed'] = completed
+                if completed:
+                    descanso_str = exercicio_atual.get('Descanso', '60s')
+                    try:
+                        rest_seconds = int(re.search(r'\d+', descanso_str).group())
+                    except:
+                        rest_seconds = 60
+                    st.session_state['set_timers'][set_key] = time.time() + rest_seconds
+                    st.session_state.workout_log.append(
+                        {'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
+                         'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()})
+                else:
+                    if set_key in st.session_state['set_timers']:
+                        del st.session_state['set_timers'][set_key]
+                st.rerun()
+        if not set_info['completed']:
+            with cols[1]:
+                set_info['weight'] = st.number_input("Peso (kg)", key=f"weight_{set_key}",
+                                                     value=float(set_info['weight']), format="%.1f")
+            with cols[2]:
+                set_info['reps'] = st.number_input("Reps", key=f"reps_{set_key}", value=int(set_info['reps']))
+        else:
+            with cols[1]:
+                st.write(f"Peso: **{set_info['weight']} kg**")
+            with cols[2]:
+                st.write(f"Reps: **{set_info['reps']}**")
+        if set_key in st.session_state['set_timers']:
+            end_time = st.session_state['set_timers'][set_key]
+            remaining = end_time - time.time()
+            if remaining > 0:
+                with cols[3]:
+                    st.info(f"⏳ Descanso: **{int(remaining)}s**")
+            else:
+                del st.session_state['set_timers'][set_key]
+                st.rerun()
+    st.markdown("---")
+    all_sets_done = all(
+        st.session_state.get(f"set_{idx_atual}_{i}", {}).get('completed', False) for i in range(num_series))
+    nav_cols = st.columns([1, 1, 1])
+    with nav_cols[1]:
+        if all_sets_done:
+            if idx_atual < len(plano_atual) - 1:
+                if st.button("Próximo Exercício →", use_container_width=True, type="primary"):
+                    st.session_state['current_exercise_index'] += 1
+                    st.rerun()
+            else:
+                if st.button("✅ Finalizar Treino", use_container_width=True, type="primary"):
+                    hist = st.session_state.get('historico_treinos', [])
+                    hist.extend(st.session_state.workout_log)
+                    st.session_state['historico_treinos'] = hist
+                    freq = st.session_state.get('frequencia', [])
+                    today = date.today()
+                    if today not in freq:
+                        freq.append(today)
+                        st.session_state['frequencia'] = freq
+                    salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+                    st.session_state['workout_in_progress'] = False
+                    st.balloons()
+                    st.success("Treino finalizado com sucesso! Bom trabalho!")
+                    time.sleep(2)
+                    st.rerun()
+    with nav_cols[2]:
+        if st.button("❌ Desistir do Treino", use_container_width=True):
+            st.session_state['workout_in_progress'] = False
+            st.warning("Treino cancelado.")
+            time.sleep(1)
+            st.rerun()
+
+
 def render_rede_social():
     st.title("🌐 Feed Social")
     st.markdown("---")
-
-    # --- Seção para criar um novo post ---
     with st.expander("💬 Criar nova publicação"):
         with st.form("form_novo_post", clear_on_submit=True):
             comentario = st.text_area("O que você está pensando?",
                                       placeholder="Compartilhe seu progresso, uma dica ou uma foto do seu treino!")
             foto_post = st.file_uploader("Adicionar uma foto", type=['png', 'jpg', 'jpeg'])
-
             submitted = st.form_submit_button("Publicar")
-
             if submitted:
                 user_uid = st.session_state.get('user_uid')
                 username = st.session_state.get('usuario_logado')
-
                 img_b64 = None
                 if foto_post:
                     try:
                         img = Image.open(foto_post).convert('RGB')
-                        # Redimensionar a imagem se for muito grande para não sobrecarregar o Firestore
                         img.thumbnail((800, 800))
                         img_b64 = b64_from_pil(img)
                     except Exception as e:
                         st.error(f"Erro ao processar a imagem: {e}")
-
                 with st.spinner("Publicando..."):
                     sucesso = salvar_post_firebase(user_uid, username, comentario, img_b64)
                     if sucesso:
-                        st.success("Publicação criada com sucesso!")
-                        st.rerun()  # Recarrega a página para mostrar o novo post
+                        st.success("Publicação criada com sucesso!"); st.rerun()
                     else:
                         st.error("Não foi possível criar a publicação.")
-
     st.markdown("---")
     st.subheader("Seu Feed")
-
-    # --- Carregar e exibir o feed de posts ---
     user_uid = st.session_state.get('user_uid')
     posts = carregar_feed_firebase(user_uid)
-
     if not posts:
         st.info(
             "Seu feed está vazio. Siga outros atletas na página 'Buscar Usuários' para ver as publicações deles aqui!")
         return
-
     for post in posts:
         post_id = post.get('id')
         username = post.get('username', 'Usuário Anônimo')
         timestamp = post.get('timestamp')
-
-        # O timestamp do Firestore pode vir como um objeto datetime
-        if isinstance(timestamp, datetime):
-            data_post = timestamp.strftime("%d/%m/%Y às %H:%M")
-        else:
-            data_post = "algum tempo atrás"
-
-        # Usar st.container para agrupar o conteúdo de cada post
+        data_post = timestamp.strftime("%d/%m/%Y às %H:%M") if isinstance(timestamp, datetime) else "algum tempo atrás"
         with st.container(border=True):
             st.markdown(f"**👤 {username}** · *{data_post}*")
-
-            if post.get('text_content'):
-                st.write(post['text_content'])
-
+            if post.get('text_content'): st.write(post['text_content'])
             if post.get('image_b64'):
                 try:
                     st.image(base64.b64decode(post['image_b64']))
                 except Exception:
                     st.warning("Não foi possível carregar a imagem deste post.")
-
-            # --- Seção de Ações (Curtir, Comentar) ---
-            like_count = post.get('like_count', 0)
-            comment_count = post.get('comment_count', 0)
-
+            like_count, comment_count = post.get('like_count', 0), post.get('comment_count', 0)
             col1, col2, _ = st.columns([1, 1, 5])
-
             with col1:
                 if st.button(f"❤️ Curtir ({like_count})", key=f"like_{post_id}"):
-                    curtir_post(post_id, st.session_state.get('user_uid'))
-                    st.rerun()  # Recarrega para atualizar a contagem de likes
-
+                    curtir_post(post_id, st.session_state.get('user_uid'));
+                    st.rerun()
             with col2:
-                # Label estático para a seção de comentários
                 st.write(f"💬 Comentários ({comment_count})")
-
-            # --- Seção de Comentários ---
             with st.expander("Ver e adicionar comentários"):
                 comentarios = carregar_comentarios(post_id)
                 if comentarios:
                     for comment in comentarios:
-                        comment_user = comment.get('username', 'Usuário')
-                        comment_text = comment.get('text', '')
-                        st.markdown(f"> **{comment_user}:** {comment_text}")
+                        st.markdown(f"> **{comment.get('username', 'Usuário')}:** {comment.get('text', '')}")
                 else:
                     st.write("Nenhum comentário ainda.")
-
-                # Formulário para novo comentário
                 comment_text = st.text_input("Escreva um comentário...", key=f"comment_input_{post_id}",
                                              label_visibility="collapsed")
                 if st.button("Enviar", key=f"comment_btn_{post_id}"):
                     if comment_text:
-                        sucesso = comentar_post(
-                            post_id,
-                            st.session_state.get('user_uid'),
-                            st.session_state.get('usuario_logado'),
-                            comment_text
-                        )
-                        if sucesso:
-                            # Limpa o input e recarrega
-                            st.session_state[f"comment_input_{post_id}"] = ""
-                            st.rerun()
+                        sucesso = comentar_post(post_id, st.session_state.get('user_uid'),
+                                                st.session_state.get('usuario_logado'), comment_text)
+                        if sucesso: st.session_state[f"comment_input_{post_id}"] = ""; st.rerun()
                     else:
                         st.warning("O comentário não pode estar vazio.")
 
@@ -1035,39 +1054,30 @@ def render_rede_social():
 def render_buscar_usuarios():
     st.title("🔎 Buscar Usuários")
     st.info("Encontre outros atletas e comece a segui-los para ver suas publicações no seu feed.")
-
     current_user_uid = st.session_state.get('user_uid')
     all_users = get_all_users()
     following_list = get_following_list(current_user_uid)
-
     if not all_users:
         st.warning("Nenhum usuário encontrado.")
         return
-
     for user in all_users:
-        user_id = user['id']
-        username = user['username']
-
-        # Não exibe o próprio usuário na lista
-        if user_id == current_user_uid:
-            continue
-
+        user_id, username = user['id'], user['username']
+        if user_id == current_user_uid: continue
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.subheader(username)
-
             with col2:
                 is_following = user_id in following_list
                 if is_following:
                     if st.button("Deixar de Seguir", key=f"unfollow_{user_id}", use_container_width=True):
-                        unfollow_user(current_user_uid, user_id)
-                        st.success(f"Você deixou de seguir {username}.")
+                        unfollow_user(current_user_uid, user_id);
+                        st.success(f"Você deixou de seguir {username}.");
                         st.rerun()
                 else:
                     if st.button("Seguir", key=f"follow_{user_id}", type="primary", use_container_width=True):
-                        follow_user(current_user_uid, user_id)
-                        st.success(f"Você está seguindo {username}!")
+                        follow_user(current_user_uid, user_id);
+                        st.success(f"Você está seguindo {username}!");
                         st.rerun()
 
 
@@ -1080,12 +1090,10 @@ def render_dashboard():
     if num_treinos > 0:
         info = verificar_periodizacao(num_treinos)
         fase = info['fase_atual']
-        st.markdown(f"""
-            <div style='padding:20px;border-radius:12px;background:linear-gradient(90deg,{fase['cor']},#ffffff);color:#111;'>
+        st.markdown(f"""<div style='padding:20px;border-radius:12px;background:linear-gradient(90deg,{fase['cor']},#ffffff);color:#111;'>
             <h3>🎯 Fase Atual: {fase['nome']} | Ciclo {info['numero_ciclo']}</h3>
-            <p>{fase['reps']} reps · {fase['series']} séries · Descanso {fase['descanso']}</p>
-            </div>
-        """, unsafe_allow_html=True)
+            <p>{fase['reps']} reps · {fase['series']} séries · Descanso {fase['descanso']}</p></div>""",
+                    unsafe_allow_html=True)
     if st.session_state.get('medidas'):
         dfm = pd.DataFrame(st.session_state['medidas'])
         dfm['data'] = pd.to_datetime(dfm['data'])
@@ -1126,14 +1134,12 @@ def render_questionario():
             nivel = st.selectbox("Qual seu nível de experiência?", ["Iniciante", "Intermediário/Avançado"],
                                  index=0 if dados.get('nivel') == 'Iniciante' else 1)
             objetivo = st.selectbox("Qual seu objetivo principal?", ["Hipertrofia", "Emagrecimento", "Condicionamento"],
-                                      index=["Hipertrofia", "Emagrecimento", "Condicionamento"].index(
-                                          dados.get('objetivo', 'Hipertrofia')))
+                                    index=["Hipertrofia", "Emagrecimento", "Condicionamento"].index(
+                                        dados.get('objetivo', 'Hipertrofia')))
             dias = st.slider("Quantos dias por semana pode treinar?", 2, 6, value=dados.get('dias_semana', 3))
-
         restricoes = st.multiselect("Possui alguma dor ou restrição nas seguintes áreas?",
                                     ["Lombar", "Joelhos", "Ombros", "Cotovelos", "Punhos"],
                                     default=dados.get('restricoes', []))
-
         if st.form_submit_button("Salvar Perfil e Gerar Treino"):
             novos_dados = {'nome': nome, 'idade': idade, 'peso': peso, 'altura': altura, 'nivel': nivel,
                            'objetivo': objetivo, 'dias_semana': dias, 'restricoes': restricoes,
@@ -1147,8 +1153,7 @@ def render_questionario():
                 st.session_state['plano_treino'] = gerar_plano_personalizado(novos_dados)
                 time.sleep(1)
             uid = st.session_state.get('user_uid')
-            if uid:
-                salvar_dados_usuario_firebase(uid)
+            if uid: salvar_dados_usuario_firebase(uid)
             st.success("Perfil salvo e plano de treino personalizado gerado com sucesso!")
             st.info("Acesse a página 'Meu Treino' para visualizar.")
 
@@ -1159,29 +1164,24 @@ def render_meu_treino():
     if not plano or all(df.empty for df in plano.values()):
         st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
         return
-
     dados = st.session_state.get('dados_usuario') or {}
     st.info(
         f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
-
-    for nome, df in plano.items():
-        if df.empty: continue
-        st.markdown(f"""
-            <div style="background: linear-gradient(90deg,#fff,#f7fafc); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.06);">
-                <h3 style="margin:0;">🏷️ {nome}</h3>
-                <p style="margin:0;color:#555;">{len(df)} exercício(s)</p>
-            </div>
-        """, unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        hist = pd.DataFrame(st.session_state.get('historico_treinos', []))
-        if not hist.empty:
-            exs = df['Exercício'].tolist()
-            df_plot = hist[hist['exercicio'].isin(exs)].copy()
-            if not df_plot.empty:
-                df_plot['data'] = pd.to_datetime(df_plot['data'])
-                fig = px.line(df_plot, x='data', y='peso', color='exercicio', markers=True,
-                              title=f'Evolução de cargas - {nome}')
-                st.plotly_chart(fig, use_container_width=True)
+    st.markdown("---")
+    for nome_treino, df_treino in plano.items():
+        if df_treino.empty: continue
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.subheader(nome_treino)
+            st.caption(f"{len(df_treino)} exercícios")
+        with col2:
+            if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
+                st.session_state['workout_in_progress'] = True
+                st.session_state['current_workout_plan'] = df_treino.to_dict('records')
+                st.session_state['current_exercise_index'] = 0
+                st.session_state['workout_log'] = []
+                st.session_state['set_timers'] = {}
+                st.rerun()
 
 
 def render_registrar_treino():
@@ -1233,9 +1233,7 @@ def render_registrar_treino():
 def render_progresso():
     st.title("📈 Progresso")
     hist = st.session_state.get('historico_treinos', [])
-    if not hist:
-        st.info("Registre treinos para ver gráficos.")
-        return
+    if not hist: st.info("Registre treinos para ver gráficos."); return
     df = pd.DataFrame(hist)
     df['data'] = pd.to_datetime(df['data'])
     vol = df.groupby(df['data'].dt.date)['volume'].sum().reset_index()
@@ -1290,8 +1288,8 @@ def render_fotos():
         ca, cb = st.columns(2)
         with ca:
             if st.button("❌ Cancelar"):
-                st.session_state['confirm_excluir_foto'] = False
-                st.session_state['foto_a_excluir'] = None
+                st.session_state['confirm_excluir_foto'] = False;
+                st.session_state['foto_a_excluir'] = None;
                 st.rerun()
         with cb:
             if st.button("✅ Confirmar exclusão"):
@@ -1303,8 +1301,8 @@ def render_fotos():
                     uid = st.session_state.get('user_uid')
                     if uid: salvar_dados_usuario_firebase(uid)
                     st.success("Foto excluída.")
-                st.session_state['confirm_excluir_foto'] = False
-                st.session_state['foto_a_excluir'] = None
+                st.session_state['confirm_excluir_foto'] = False;
+                st.session_state['foto_a_excluir'] = None;
                 st.rerun()
 
 
@@ -1418,8 +1416,7 @@ def render_nutricao():
 
 
 def calcular_tmb(sexo: str, peso: float, altura_cm: float, idade: int) -> float:
-    if sexo.lower().startswith('m'):
-        return 10 * peso + 6.25 * altura_cm - 5 * idade + 5
+    if sexo.lower().startswith('m'): return 10 * peso + 6.25 * altura_cm - 5 * idade + 5
     return 10 * peso + 6.25 * altura_cm - 5 * idade - 161
 
 
@@ -1462,7 +1459,7 @@ def render_export_backup():
     if st.session_state.get('historico_treinos'):
         df = pd.DataFrame(st.session_state['historico_treinos'])
         st.download_button("📥 Exportar histórico CSV", data=df.to_csv(index=False), file_name="historico_treinos.csv",
-                            mime="text/csv")
+                           mime="text/csv")
     if st.button("Criar backup na coleção 'backups'"):
         uid = st.session_state.get('user_uid')
         if uid:
@@ -1476,8 +1473,7 @@ def render_admin_panel():
     try:
         users = list(db.collection('usuarios').stream())
     except Exception:
-        st.error("Erro ao listar usuários.");
-        return
+        st.error("Erro ao listar usuários."); return
     st.write(f"Total usuários: {len(users)}")
     for u in users:
         d = u.to_dict()
@@ -1488,13 +1484,13 @@ def render_admin_panel():
             if st.button("Ver dados", key=f"ver_{u.id}"): st.json(d)
         with c2:
             if d.get('role') != 'admin' and st.button("Promover", key=f"prom_{u.id}"):
-                db.collection('usuarios').document(u.id).update({'role': 'admin'})
+                db.collection('usuarios').document(u.id).update({'role': 'admin'});
                 st.success("Promovido a admin.");
                 st.rerun()
         with c3:
             if st.button("Excluir", key=f"del_{u.id}"):
-                st.session_state['user_to_delete'] = u.id
-                st.session_state['confirm_delete_user'] = True
+                st.session_state['user_to_delete'] = u.id;
+                st.session_state['confirm_delete_user'] = True;
                 st.rerun()
     if st.session_state.get('confirm_delete_user'):
         st.warning("Confirmar exclusão do usuário (irrevogável).")
@@ -1512,13 +1508,13 @@ def render_admin_panel():
                         st.success("Usuário excluído.")
                     except Exception as e:
                         st.error(f"Erro ao excluir: {e}")
-                st.session_state['confirm_delete_user'] = False
-                st.session_state['user_to_delete'] = None
+                st.session_state['confirm_delete_user'] = False;
+                st.session_state['user_to_delete'] = None;
                 st.rerun()
         with cb:
             if st.button("❌ Cancelar"):
-                st.session_state['confirm_delete_user'] = False
-                st.session_state['user_to_delete'] = None
+                st.session_state['confirm_delete_user'] = False;
+                st.session_state['user_to_delete'] = None;
                 st.rerun()
 
 
@@ -1539,7 +1535,6 @@ def run():
                     del cookies['user_uid']
             except Exception as e:
                 st.error(f"Erro ao tentar login automático: {e}")
-
     if not st.session_state.get('usuario_logado'):
         render_auth()
     else:
