@@ -176,7 +176,7 @@ def ensure_session_defaults():
         'current_workout_plan': None,
         'current_exercise_index': 0,
         'workout_log': [],
-        'set_timers': {},
+        'rest_timer_end': None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -960,17 +960,27 @@ def render_main():
 # ---------------------------
 def render_workout_session():
     st.title("🔥 Treino em Andamento")
+
+    # Pega os dados do estado da sessão
     plano_atual = st.session_state['current_workout_plan']
     idx_atual = st.session_state['current_exercise_index']
     exercicio_atual = plano_atual[idx_atual]
+
     nome_exercicio = exercicio_atual['Exercício']
     series_str = exercicio_atual['Séries']
+
     try:
         num_series = int(str(series_str).split('-')[0])
     except:
         num_series = 3
+
+    # --- Barra de Progresso e Timer ---
     progresso = (idx_atual + 1) / len(plano_atual)
-    st.progress(progresso, text=f"Exercício {idx_atual + 1} de {len(plano_atual)}")
+    col_prog, col_timer = st.columns(2)
+    col_prog.progress(progresso, text=f"Exercício {idx_atual + 1} de {len(plano_atual)}")
+    timer_placeholder = col_timer.empty()  # Placeholder para o timer
+
+    # --- Container do Exercício Atual ---
     with st.container(border=True):
         col_gif, col_details = st.columns([2, 3])
         with col_gif:
@@ -984,83 +994,100 @@ def render_workout_session():
             st.markdown(
                 f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`")
             st.markdown(f"**Descanso:** `{exercicio_atual['Descanso']}`")
-    st.markdown("---")
+
     st.subheader("Registre suas séries")
+
+    # --- Lógica do Timer Único ---
+    is_resting = False
+    if st.session_state.rest_timer_end:
+        remaining = st.session_state.rest_timer_end - time.time()
+        if remaining > 0:
+            is_resting = True
+            mins, secs = divmod(int(remaining), 60)
+            timer_placeholder.metric("⏳ Descanso", f"{mins:02d}:{secs:02d}")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.session_state.rest_timer_end = None
+            st.toast("💪 Descanso finalizado!")
+            st.rerun()
+
+    # --- Checklist de Séries ---
     for i in range(num_series):
         set_key = f"set_{idx_atual}_{i}"
         if set_key not in st.session_state:
             st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
         set_info = st.session_state[set_key]
-        cols = st.columns([1, 2, 2, 2])
-        with cols[0]:
-            completed = st.checkbox(f"Série {i + 1}", value=set_info['completed'], key=f"check_{set_key}")
-            if completed != set_info['completed']:
-                set_info['completed'] = completed
-                if completed:
-                    descanso_str = exercicio_atual.get('Descanso', '60s')
-                    try:
-                        rest_seconds = int(re.search(r'\d+', descanso_str).group())
-                    except:
-                        rest_seconds = 60
-                    st.session_state['set_timers'][set_key] = time.time() + rest_seconds
-                    st.session_state.workout_log.append(
-                        {'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
-                         'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()})
-                else:
-                    if set_key in st.session_state['set_timers']:
-                        del st.session_state['set_timers'][set_key]
-                st.rerun()
-        if not set_info['completed']:
-            with cols[1]:
-                set_info['weight'] = st.number_input("Peso (kg)", key=f"weight_{set_key}",
-                                                     value=float(set_info['weight']), format="%.1f")
-            with cols[2]:
-                set_info['reps'] = st.number_input("Reps", key=f"reps_{set_key}", value=int(set_info['reps']))
-        else:
-            with cols[1]:
-                st.write(f"Peso: **{set_info['weight']} kg**")
-            with cols[2]:
-                st.write(f"Reps: **{set_info['reps']}**")
-        if set_key in st.session_state['set_timers']:
-            end_time = st.session_state['set_timers'][set_key]
-            remaining = end_time - time.time()
-            if remaining > 0:
-                with cols[3]:
-                    st.info(f"⏳ Descanso: **{int(remaining)}s**")
+
+        cols = st.columns([1, 2, 2, 1])
+
+        # Desabilita o checkbox se o usuário estiver descansando (e a série não for a que iniciou o descanso)
+        disable_checkbox = is_resting and not set_info['completed']
+
+        completed = cols[0].checkbox(f"Série {i + 1}", value=set_info['completed'], key=f"check_{set_key}",
+                                     disabled=disable_checkbox)
+
+        if completed and not set_info['completed']:  # Se acabou de marcar
+            if is_resting:
+                st.warning("Termine seu descanso antes de marcar a próxima série!")
+                set_info['completed'] = False  # Reverte a ação
             else:
-                del st.session_state['set_timers'][set_key]
+                set_info['completed'] = True
+                descanso_str = exercicio_atual.get('Descanso', '60s')
+                try:
+                    rest_seconds = int(re.search(r'\d+', descanso_str).group())
+                except:
+                    rest_seconds = 60
+
+                st.session_state.rest_timer_end = time.time() + rest_seconds
+                st.session_state.workout_log.append({
+                    'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
+                    'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()
+                })
                 st.rerun()
+
+        if not set_info['completed']:
+            set_info['weight'] = cols[1].number_input("Peso (kg)", key=f"weight_{set_key}",
+                                                      value=float(set_info['weight']), format="%.1f",
+                                                      disabled=is_resting)
+            set_info['reps'] = cols[2].number_input("Reps", key=f"reps_{set_key}", value=int(set_info['reps']),
+                                                    disabled=is_resting)
+        else:
+            cols[1].write(f"Peso: **{set_info['weight']} kg**")
+            cols[2].write(f"Reps: **{set_info['reps']}**")
+
     st.markdown("---")
+
+    # --- Botões de Navegação do Treino ---
     all_sets_done = all(
         st.session_state.get(f"set_{idx_atual}_{i}", {}).get('completed', False) for i in range(num_series))
+
     nav_cols = st.columns([1, 1, 1])
     with nav_cols[1]:
         if all_sets_done:
             if idx_atual < len(plano_atual) - 1:
                 if st.button("Próximo Exercício →", use_container_width=True, type="primary"):
-                    st.session_state['current_exercise_index'] += 1
+                    st.session_state['current_exercise_index'] += 1;
                     st.rerun()
             else:
                 if st.button("✅ Finalizar Treino", use_container_width=True, type="primary"):
-                    hist = st.session_state.get('historico_treinos', [])
-                    hist.extend(st.session_state.workout_log)
+                    hist = st.session_state.get('historico_treinos', []);
+                    hist.extend(st.session_state.workout_log);
                     st.session_state['historico_treinos'] = hist
-                    freq = st.session_state.get('frequencia', [])
+                    freq = st.session_state.get('frequencia', []);
                     today = date.today()
-                    if today not in freq:
-                        freq.append(today)
-                        st.session_state['frequencia'] = freq
+                    if today not in freq: freq.append(today); st.session_state['frequencia'] = freq
                     salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
-                    st.session_state['workout_in_progress'] = False
-                    st.balloons()
-                    st.success("Treino finalizado com sucesso! Bom trabalho!")
-                    time.sleep(2)
+                    st.session_state['workout_in_progress'] = False;
+                    st.balloons();
+                    st.success("Treino finalizado!");
+                    time.sleep(2);
                     st.rerun()
     with nav_cols[2]:
         if st.button("❌ Desistir do Treino", use_container_width=True):
-            st.session_state['workout_in_progress'] = False
-            st.warning("Treino cancelado.")
-            time.sleep(1)
+            st.session_state['workout_in_progress'] = False;
+            st.warning("Treino cancelado.");
+            time.sleep(1);
             st.rerun()
 
 
