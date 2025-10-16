@@ -778,6 +778,7 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
+
     if fase_atual:
         series_base, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
     else:
@@ -810,7 +811,8 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         return exercicios_selecionados
 
     plano = {}
-    if nivel == 'Iniciante' or dias <= 2:
+    # --- LÓGICA ALTERADA AQUI ---
+    if dias <= 2:  # Agora, a verificação é apenas pelo número de dias
         plano['Treino A: Corpo Inteiro'] = selecionar_exercicios(['Peito', 'Costas', 'Pernas', 'Ombros'], 3, 1)
         plano['Treino B: Corpo Inteiro'] = selecionar_exercicios(['Pernas', 'Costas', 'Peito', 'Bíceps', 'Tríceps'], 3,
                                                                  2)
@@ -830,6 +832,7 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         plano['Treino C: Pernas'] = selecionar_exercicios(['Pernas'], 2, 3)
         plano['Treino D: Ombros'] = selecionar_exercicios(['Ombros'], 2, 2)
         plano['Treino E: Braços & Core'] = selecionar_exercicios(['Bíceps', 'Tríceps', 'Core'], 0, 4)
+
     for nome, exercicios in plano.items():
         if exercicios:
             plano[nome] = pd.DataFrame(exercicios)
