@@ -33,7 +33,8 @@ import numpy as np
 import plotly.express as px
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from streamlit_cookies_manager import CookieManager
-
+import requests
+import random
 # Optional SSIM
 try:
     from skimage.metrics import structural_similarity as ssim  # type: ignore
@@ -203,6 +204,88 @@ def find_exercise_gif(exercise_name: str) -> Optional[str]:
         return None
     return None
 
+
+def trocar_exercicio(nome_treino, exercise_index, exercicio_atual):
+    """Substitui um exercício por outro do mesmo grupo muscular."""
+    try:
+        # 1. Encontrar o grupo muscular do exercício a ser trocado
+        grupo_muscular = EXERCICIOS_DB.get(exercicio_atual, {}).get('grupo')
+        if not grupo_muscular:
+            st.warning("Não foi possível identificar o grupo muscular para encontrar um substituto.")
+            return
+
+        # 2. Encontrar todos os exercícios candidatos do mesmo grupo
+        df_treino_atual = pd.DataFrame(st.session_state['plano_treino'][nome_treino])
+        exercicios_no_plano = set(df_treino_atual['Exercício'])
+
+        candidatos = [
+            ex for ex, details in EXERCICIOS_DB.items()
+            if details.get('grupo') == grupo_muscular and ex not in exercicios_no_plano
+        ]
+
+        # 3. Se houver candidatos, escolher um e fazer a troca
+        if candidatos:
+            novo_exercicio = random.choice(candidatos)
+
+            # Atualiza o DataFrame no session_state
+            df_para_atualizar = st.session_state['plano_treino'][nome_treino]
+            # Convertendo para DataFrame para manipulação segura
+            df_manipulavel = pd.DataFrame(df_para_atualizar)
+            df_manipulavel.loc[exercise_index, 'Exercício'] = novo_exercicio
+
+            # Salva de volta no formato de lista de dicionários
+            st.session_state['plano_treino'][nome_treino] = df_manipulavel.to_dict('records')
+
+            st.toast(f"'{exercicio_atual}' trocado por '{novo_exercicio}'!")
+
+            # 4. Salvar a alteração no Firebase
+            salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+        else:
+            st.warning("Nenhum exercício alternativo encontrado para este grupo muscular.")
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao tentar trocar o exercício: {e}")
+
+def trocar_exercicio(nome_treino, exercise_index, exercicio_atual):
+    """Substitui um exercício por outro do mesmo grupo muscular."""
+    try:
+        # 1. Encontrar o grupo muscular do exercício a ser trocado
+        grupo_muscular = EXERCICIOS_DB.get(exercicio_atual, {}).get('grupo')
+        if not grupo_muscular:
+            st.warning("Não foi possível identificar o grupo muscular para encontrar um substituto.")
+            return
+
+        # 2. Encontrar todos os exercícios candidatos do mesmo grupo
+        df_treino_atual = pd.DataFrame(st.session_state['plano_treino'][nome_treino])
+        exercicios_no_plano = set(df_treino_atual['Exercício'])
+
+        candidatos = [
+            ex for ex, details in EXERCICIOS_DB.items()
+            if details.get('grupo') == grupo_muscular and ex not in exercicios_no_plano
+        ]
+
+        # 3. Se houver candidatos, escolher um e fazer a troca
+        if candidatos:
+            novo_exercicio = random.choice(candidatos)
+
+            # Atualiza o DataFrame no session_state
+            df_para_atualizar = st.session_state['plano_treino'][nome_treino]
+            # Convertendo para DataFrame para manipulação segura
+            df_manipulavel = pd.DataFrame(df_para_atualizar)
+            df_manipulavel.loc[exercise_index, 'Exercício'] = novo_exercicio
+
+            # Salva de volta no formato de lista de dicionários
+            st.session_state['plano_treino'][nome_treino] = df_manipulavel.to_dict('records')
+
+            st.toast(f"'{exercicio_atual}' trocado por '{novo_exercicio}'!")
+
+            # 4. Salvar a alteração no Firebase
+            salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+        else:
+            st.warning("Nenhum exercício alternativo encontrado para este grupo muscular.")
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao tentar trocar o exercício: {e}")
 
 # ---------------------------
 # Banco de Exercícios Expandido
@@ -1161,27 +1244,60 @@ def render_questionario():
 def render_meu_treino():
     st.title("💪 Meu Treino")
     plano = st.session_state.get('plano_treino')
-    if not plano or all(df.empty for df in plano.values()):
+    if not plano or all(isinstance(df, list) and not df for df in plano.values()):
         st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
         return
+
     dados = st.session_state.get('dados_usuario') or {}
     st.info(
         f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
     st.markdown("---")
-    for nome_treino, df_treino in plano.items():
-        if df_treino.empty: continue
+
+    for nome_treino, df_treino_dict in plano.items():
+        # [CORREÇÃO APLICADA AQUI]
+        # 1. Primeiro, converta para DataFrame
+        df_treino = pd.DataFrame(df_treino_dict)
+
+        # 2. Agora, verifique se o DataFrame está vazio usando .empty
+        if df_treino.empty:
+            continue
+
         col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader(nome_treino)
             st.caption(f"{len(df_treino)} exercícios")
         with col2:
             if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
-                st.session_state['workout_in_progress'] = True
-                st.session_state['current_workout_plan'] = df_treino.to_dict('records')
-                st.session_state['current_exercise_index'] = 0
-                st.session_state['workout_log'] = []
-                st.session_state['set_timers'] = {}
+                st.session_state.update({
+                    'workout_in_progress': True,
+                    'current_workout_plan': df_treino.to_dict('records'),
+                    'current_exercise_index': 0,
+                    'workout_log': [],
+                    'set_timers': {}
+                })
                 st.rerun()
+
+        for index, row in df_treino.iterrows():
+            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row[
+                'Descanso']
+            with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
+                col1, col2 = st.columns([2, 3])
+                with col1:
+                    gif_url = find_exercise_gif(exercicio)
+                    if gif_url:
+                        st.image(gif_url, caption=f"Execução de {exercicio}")
+                    else:
+                        st.info("Guia visual indisponível.")
+                with col2:
+                    st.markdown("##### 📋 **Instruções**")
+                    st.markdown(
+                        f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
+                    st.markdown("---")
+                    st.write(f"**Grupo Muscular:** {EXERCICIOS_DB.get(exercicio, {}).get('grupo', 'N/A')}")
+                    st.write(f"**Equipamento:** {EXERCICIOS_DB.get(exercicio, {}).get('equipamento', 'N/A')}")
+                    st.button("🔄 Trocar Exercício", key=f"swap_{nome_treino}_{index}", on_click=trocar_exercicio,
+                              args=(nome_treino, index, exercicio), use_container_width=True)
+        st.markdown("---")
 
 
 def render_registrar_treino():
