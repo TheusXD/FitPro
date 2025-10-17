@@ -18,6 +18,7 @@ FitPro - App completo pronto para deploy
 """
 import os
 import re
+import urllib.parse
 import io
 import json
 import time
@@ -33,7 +34,8 @@ import numpy as np
 import plotly.express as px
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from streamlit_cookies_manager import CookieManager
-import requests
+
+
 import random
 # Optional SSIM
 try:
@@ -190,20 +192,52 @@ ensure_session_defaults()
 # Função para buscar GIF de exercício
 # ---------------------------
 @st.cache_data(ttl=3600 * 24)  # Cache de 24 horas
-def find_exercise_gif(exercise_name: str) -> Optional[str]:
-    """Busca por um GIF de exercício e retorna a URL."""
-    try:
-        search_term = f"{exercise_name} exercise animated gif"
-        params = {"q": search_term, "key": "LIVDSRZULELA", "limit": 1}
-        response = requests.get("https://g.tenor.com/v1/search", params=params)
-        response.raise_for_status()
-        results = response.json()
-        if results['results']:
-            return results['results'][0]['media'][0]['gif']['url']
-    except Exception:
-        return None
-    return None
+def find_exercise_video_youtube(exercise_name: str) -> Optional[str]:
+    """Busca vídeo no YouTube via scraping e regex, retorna URL."""
+    # st.write(f"--- Iniciando busca para: {exercise_name} ---") # DEBUG
+    search_terms = [
+        f"como fazer {exercise_name} execução correta",
+        f"{exercise_name} tutorial pt-br",
+        f"{exercise_name} exercise tutorial",
+        f"{exercise_name} exercise form",
+        exercise_name
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
 
+    for term in search_terms:
+        try:
+            # st.write(f"Tentando busca com termo: '{term}'") # DEBUG
+            query = urllib.parse.urlencode({'search_query': term})
+            url = f"https://www.youtube.com/results?{query}"
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            html_content = response.text
+            video_ids = re.findall(r'"/watch\?v=([a-zA-Z0-9_-]{11})"', html_content)
+            # st.write(f"IDs encontrados para '{term}': {video_ids}") # DEBUG
+
+            if video_ids:
+                first_unique_id = None
+                seen_ids = set()
+                for video_id in video_ids:
+                    if video_id not in seen_ids:
+                        first_unique_id = video_id
+                        seen_ids.add(video_id)
+                        break
+                if first_unique_id:
+                    video_url = f"https://www.youtube.com/watch?v={first_unique_id}"
+                    # st.write(f"*** Encontrado vídeo: {video_url} ***") # DEBUG
+                    return video_url
+        except requests.exceptions.RequestException as e:
+            # st.write(f"!!! Erro de rede durante a busca por '{term}': {e}") # DEBUG
+            time.sleep(1)
+            continue
+        except Exception as e:
+            # st.write(f"!!! Erro geral durante a busca por '{term}': {e}") # DEBUG
+            continue
+    # st.write(f"--- Busca finalizada para {exercise_name}, nenhum vídeo encontrado. ---") # DEBUG
+    return None
 
 def trocar_exercicio(nome_treino, exercise_index, exercicio_atual):
     """Substitui um exercício por outro do mesmo grupo muscular."""
@@ -960,15 +994,9 @@ def render_main():
 # ---------------------------
 def render_workout_session():
     st.title("🔥 Treino em Andamento")
-
-    # Pega os dados do estado da sessão
-    plano_atual = st.session_state['current_workout_plan']
-    idx_atual = st.session_state['current_exercise_index']
+    plano_atual, idx_atual = st.session_state['current_workout_plan'], st.session_state['current_exercise_index']
     exercicio_atual = plano_atual[idx_atual]
-
-    nome_exercicio = exercicio_atual['Exercício']
-    series_str = exercicio_atual['Séries']
-
+    nome_exercicio, series_str = exercicio_atual['Exercício'], exercicio_atual['Séries']
     try:
         num_series = int(str(series_str).split('-')[0])
     except:
@@ -978,24 +1006,7 @@ def render_workout_session():
     progresso = (idx_atual + 1) / len(plano_atual)
     col_prog, col_timer = st.columns(2)
     col_prog.progress(progresso, text=f"Exercício {idx_atual + 1} de {len(plano_atual)}")
-    timer_placeholder = col_timer.empty()  # Placeholder para o timer
-
-    # --- Container do Exercício Atual ---
-    with st.container(border=True):
-        col_gif, col_details = st.columns([2, 3])
-        with col_gif:
-            gif_url = find_exercise_gif(nome_exercicio)
-            if gif_url:
-                st.image(gif_url)
-            else:
-                st.text("GIF indisponível")
-        with col_details:
-            st.header(nome_exercicio)
-            st.markdown(
-                f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`")
-            st.markdown(f"**Descanso:** `{exercicio_atual['Descanso']}`")
-
-    st.subheader("Registre suas séries")
+    timer_placeholder = col_timer.empty()
 
     # --- Lógica do Timer Único ---
     is_resting = False
@@ -1012,40 +1023,51 @@ def render_workout_session():
             st.toast("💪 Descanso finalizado!")
             st.rerun()
 
-    # --- Checklist de Séries ---
+    # --- Container do Exercício Atual (com vídeo) ---
+    with st.container(border=True):
+        col_video, col_details = st.columns([2, 3])
+        # --- CORREÇÃO AQUI ---
+        with col_video: # Substitua 'ith' e 'col_gif:' por esta linha, com a indentação correta
+            # Chama a NOVA função de busca e usa st.video
+            video_url = find_exercise_video_youtube(nome_exercicio)
+            if video_url:
+                st.video(video_url)
+            else:
+                st.text("Vídeo indisponível")
+        # --- FIM DA CORREÇÃO ---
+        with col_details:
+            st.header(nome_exercicio)
+            st.markdown(
+                f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`\n**Descanso:** `{exercicio_atual['Descanso']}`")
+    st.subheader("Registre suas séries")
     for i in range(num_series):
         set_key = f"set_{idx_atual}_{i}"
-        if set_key not in st.session_state:
-            st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
+        if set_key not in st.session_state: st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
         set_info = st.session_state[set_key]
-
         cols = st.columns([1, 2, 2, 1])
-
-        # Desabilita o checkbox se o usuário estiver descansando (e a série não for a que iniciou o descanso)
-        disable_checkbox = is_resting and not set_info['completed']
-
+        disable_checkbox = is_resting and not set_info['completed']  # Desabilita checkbox se estiver em descanso
         completed = cols[0].checkbox(f"Série {i + 1}", value=set_info['completed'], key=f"check_{set_key}",
                                      disabled=disable_checkbox)
-
-        if completed and not set_info['completed']:  # Se acabou de marcar
-            if is_resting:
-                st.warning("Termine seu descanso antes de marcar a próxima série!")
-                set_info['completed'] = False  # Reverte a ação
-            else:
-                set_info['completed'] = True
-                descanso_str = exercicio_atual.get('Descanso', '60s')
-                try:
-                    rest_seconds = int(re.search(r'\d+', descanso_str).group())
-                except:
-                    rest_seconds = 60
-
-                st.session_state.rest_timer_end = time.time() + rest_seconds
-                st.session_state.workout_log.append({
-                    'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
-                    'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()
-                })
-                st.rerun()
-
+        if completed != set_info['completed']:
+            set_info['completed'] = completed
+            if completed:
+                if is_resting:
+                    st.warning("Termine seu descanso antes de marcar a próxima série!")
+                    set_info['completed'] = False
+                else:
+                    descanso_str = exercicio_atual.get('Descanso', '60s')
+                    try:
+                        rest_seconds = int(re.search(r'\d+', descanso_str).group())
+                    except:
+                        rest_seconds = 60
+                    st.session_state.rest_timer_end = time.time() + rest_seconds
+                    st.session_state.workout_log.append(
+                        {'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
+                         'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()})
+            elif set_key in st.session_state['set_timers']:
+                del st.session_state['set_timers'][
+                    set_key]  # Este else foi mantido por segurança, embora a lógica do timer esteja no rest_timer_end
+            st.rerun()
         if not set_info['completed']:
             set_info['weight'] = cols[1].number_input("Peso (kg)", key=f"weight_{set_key}",
                                                       value=float(set_info['weight']), format="%.1f",
@@ -1053,42 +1075,37 @@ def render_workout_session():
             set_info['reps'] = cols[2].number_input("Reps", key=f"reps_{set_key}", value=int(set_info['reps']),
                                                     disabled=is_resting)
         else:
-            cols[1].write(f"Peso: **{set_info['weight']} kg**")
+            cols[1].write(f"Peso: **{set_info['weight']} kg**");
             cols[2].write(f"Reps: **{set_info['reps']}**")
 
     st.markdown("---")
-
-    # --- Botões de Navegação do Treino ---
     all_sets_done = all(
         st.session_state.get(f"set_{idx_atual}_{i}", {}).get('completed', False) for i in range(num_series))
-
     nav_cols = st.columns([1, 1, 1])
-    with nav_cols[1]:
-        if all_sets_done:
-            if idx_atual < len(plano_atual) - 1:
-                if st.button("Próximo Exercício →", use_container_width=True, type="primary"):
-                    st.session_state['current_exercise_index'] += 1;
-                    st.rerun()
-            else:
-                if st.button("✅ Finalizar Treino", use_container_width=True, type="primary"):
-                    hist = st.session_state.get('historico_treinos', []);
-                    hist.extend(st.session_state.workout_log);
-                    st.session_state['historico_treinos'] = hist
-                    freq = st.session_state.get('frequencia', []);
-                    today = date.today()
-                    if today not in freq: freq.append(today); st.session_state['frequencia'] = freq
-                    salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
-                    st.session_state['workout_in_progress'] = False;
-                    st.balloons();
-                    st.success("Treino finalizado!");
-                    time.sleep(2);
-                    st.rerun()
-    with nav_cols[2]:
-        if st.button("❌ Desistir do Treino", use_container_width=True):
-            st.session_state['workout_in_progress'] = False;
-            st.warning("Treino cancelado.");
-            time.sleep(1);
-            st.rerun()
+    if all_sets_done:
+        if idx_atual < len(plano_atual) - 1:
+            if nav_cols[1].button("Próximo Exercício →", use_container_width=True, type="primary"):
+                st.session_state['current_exercise_index'] += 1;
+                st.rerun()
+        else:
+            if nav_cols[1].button("✅ Finalizar Treino", use_container_width=True, type="primary"):
+                hist = st.session_state.get('historico_treinos', []);
+                hist.extend(st.session_state.workout_log);
+                st.session_state['historico_treinos'] = hist
+                freq = st.session_state.get('frequencia', []);
+                today = date.today()
+                if today not in freq: freq.append(today); st.session_state['frequencia'] = freq
+                salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+                st.session_state['workout_in_progress'] = False;
+                st.balloons();
+                st.success("Treino finalizado!");
+                time.sleep(2);
+                st.rerun()
+    if nav_cols[2].button("❌ Desistir do Treino", use_container_width=True):
+        st.session_state['workout_in_progress'] = False;
+        st.warning("Treino cancelado.");
+        time.sleep(1);
+        st.rerun()
 
 
 def render_rede_social():
@@ -1274,7 +1291,20 @@ def render_questionario():
 def render_meu_treino():
     st.title("💪 Meu Treino")
     plano = st.session_state.get('plano_treino')
-    if not plano or all(isinstance(df, list) and not df for df in plano.values()):
+
+    # Checagem inicial mais robusta para plano vazio
+    plano_vazio = True
+    if plano and isinstance(plano, dict):
+        for nome_treino, treino_data in plano.items():
+            # Verifica se é um DataFrame não vazio ou uma lista não vazia de dicionários
+            if isinstance(treino_data, pd.DataFrame) and not treino_data.empty:
+                plano_vazio = False
+                break
+            elif isinstance(treino_data, list) and treino_data and all(isinstance(item, dict) for item in treino_data):
+                 plano_vazio = False
+                 break # Encontrou dados válidos, pode parar de checar
+
+    if not plano or plano_vazio:
         st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
         return
 
@@ -1283,15 +1313,24 @@ def render_meu_treino():
         f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
     st.markdown("---")
 
-    for nome_treino, df_treino_dict in plano.items():
-        # [CORREÇÃO APLICADA AQUI]
-        # 1. Primeiro, converta para DataFrame
-        df_treino = pd.DataFrame(df_treino_dict)
+    # Itera sobre o dicionário do plano de treino
+    for nome_treino, treino_data in plano.items(): # Renomeado df_treino_dict para treino_data
 
-        # 2. Agora, verifique se o DataFrame está vazio usando .empty
+        # --- CORREÇÃO PRINCIPAL ---
+        # Garante que df_treino seja um DataFrame, tratando se treino_data já é um DF ou uma lista
+        if isinstance(treino_data, pd.DataFrame):
+            df_treino = treino_data
+        elif isinstance(treino_data, list):
+             df_treino = pd.DataFrame(treino_data) # Converte lista de dicts para DF
+        else:
+            df_treino = pd.DataFrame() # Cria DF vazio se o dado for inválido (None, etc.)
+
+        # Agora, a verificação com .empty funciona corretamente
         if df_treino.empty:
-            continue
+            continue # Pula para o próximo treino se este não tiver exercícios
+        # --- FIM DA CORREÇÃO ---
 
+        # O restante da renderização continua igual...
         col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader(nome_treino)
@@ -1300,34 +1339,44 @@ def render_meu_treino():
             if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
                 st.session_state.update({
                     'workout_in_progress': True,
-                    'current_workout_plan': df_treino.to_dict('records'),
+                    'current_workout_plan': df_treino.to_dict('records'), # Salva como lista para a sessão
                     'current_exercise_index': 0,
                     'workout_log': [],
-                    'set_timers': {}
+                    'rest_timer_end': None
                 })
                 st.rerun()
 
         for index, row in df_treino.iterrows():
-            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row[
-                'Descanso']
+            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row['Descanso']
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col1, col2 = st.columns([2, 3])
-                with col1:
-                    gif_url = find_exercise_gif(exercicio)
-                    if gif_url:
-                        st.image(gif_url, caption=f"Execução de {exercicio}")
+                col_media, col_instr = st.columns([1, 2])  # Ajuste da proporção para [1, 2]
+
+                # --- Coluna da Mídia (com link_button) ---
+                with col_media:  # Certifique-se que esta linha está correta
+                    video_url = find_exercise_video_youtube(exercicio)
+                    if video_url:
+                        # Usando st.link_button em vez de st.video
+                        st.link_button("🎥 Assistir Execução", video_url)
+                        st.caption(f"Abre o vídeo de {exercicio} no YouTube")
                     else:
-                        st.info("Guia visual indisponível.")
-                with col2:
+                        st.info("Vídeo de execução indisponível.")
+
+                # --- Coluna das Instruções ---
+                with col_instr:
                     st.markdown("##### 📋 **Instruções**")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
                     st.markdown("---")
                     st.write(f"**Grupo Muscular:** {EXERCICIOS_DB.get(exercicio, {}).get('grupo', 'N/A')}")
                     st.write(f"**Equipamento:** {EXERCICIOS_DB.get(exercicio, {}).get('equipamento', 'N/A')}")
-                    st.button("🔄 Trocar Exercício", key=f"swap_{nome_treino}_{index}", on_click=trocar_exercicio,
-                              args=(nome_treino, index, exercicio), use_container_width=True)
-        st.markdown("---")
+                    st.button("🔄 Trocar Exercício",
+                              key=f"swap_{nome_treino}_{index}",
+                              on_click=trocar_exercicio,
+                              args=(nome_treino, index, exercicio),
+                              use_container_width=True)
+
+            # (O st.markdown("---") vem depois do expander)
+        st.markdown("---")  # Fim do loop for index, row.
 
 
 def render_registrar_treino():
