@@ -325,60 +325,185 @@ def trocar_exercicio(nome_treino, exercise_index, exercicio_atual):
 # Banco de Exercícios Expandido
 # ---------------------------
 EXERCICIOS_DB = {
-    # Pernas
-    'Agachamento com Barra': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra',
-                              'restricoes': ['Lombar', 'Joelhos']},
-    'Agachamento com Halteres': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres',
-                                 'restricoes': ['Joelhos']},
-    'Agachamento Goblet': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos']},
-    'Leg Press 45°': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
-    'Cadeira Extensora': {'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
-    'Mesa Flexora': {'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
-    'Stiff com Halteres': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar']},
-    'Elevação Pélvica': {'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Barra', 'restricoes': []},
-    'Panturrilha no Leg Press': {'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
+    # Pernas (Foco Quadríceps/Geral)
+    'Agachamento com Barra': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Joelhos'],
+        'descricao': 'Barra apoiada nos ombros/trapézio. Pés afastados na largura dos ombros. Desça flexionando quadril e joelhos, mantendo a coluna neutra e o peito aberto. Suba estendendo quadril e joelhos.'
+    },
+    'Agachamento com Halteres': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'],
+        'descricao': 'Segure halteres ao lado do corpo com as palmas voltadas para dentro. Mantenha o tronco ereto, desça flexionando quadril e joelhos. Suba estendendo.'
+    },
+    'Agachamento Goblet': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'],
+        'descricao': 'Segure um halter verticalmente contra o peito. Pés levemente mais afastados que os ombros. Desça o mais fundo possível, mantendo o tronco ereto e os cotovelos entre os joelhos. Suba.'
+    },
+    'Leg Press 45°': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Sente-se na máquina com as costas bem apoiadas. Pés na plataforma afastados na largura dos ombros. Destrave e desça controladamente flexionando os joelhos (aprox. 90°). Empurre de volta à posição inicial sem travar os joelhos.'
+    },
+    'Cadeira Extensora': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Sente-se na máquina, ajuste o apoio dos tornozelos. Estenda completamente os joelhos, levantando o peso. Retorne controladamente à posição inicial.'
+    },
+    # Pernas (Foco Posterior)
+    'Mesa Flexora': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Deite-se de bruços na máquina, joelhos alinhados com o eixo, tornozelos sob o apoio. Flexione os joelhos trazendo os calcanhares em direção aos glúteos. Retorne controladamente.'
+    },
+    'Stiff com Halteres': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar'],
+        'descricao': 'Em pé, segure halteres na frente das coxas. Mantenha os joelhos levemente flexionados (quase estendidos). Desça o tronco projetando o quadril para trás, mantendo a coluna reta e os halteres próximos às pernas. Suba contraindo posteriores e glúteos.'
+    },
+    # Glúteos (Considerados como parte de 'Pernas' ou um grupo separado se preferir)
+    'Elevação Pélvica': {
+        'grupo': 'Pernas', # Poderia ser 'Glúteos'
+        'tipo': 'Composto',
+        'equipamento': 'Peso Corporal/Barra',
+        'restricoes': [],
+        'descricao': 'Deitado de costas com os ombros apoiados em um banco e joelhos flexionados. Apoie uma barra sobre o quadril. Desça o quadril e eleve-o o máximo possível, contraindo os glúteos no topo. Controle a descida.'
+    },
+    # [NOVO]
+    'Extensão de Quadril (Coice)': {
+        'grupo': 'Pernas', # Ou 'Glúteos'
+        'tipo': 'Isolado',
+        'equipamento': 'Peso Corporal/Caneleiras/Polia',
+        'restricoes': ['Lombar'], # Requer controle para não hiperextender
+        'descricao': 'Em quatro apoios ou em pé na polia/com caneleiras. Estenda uma perna para trás e para cima, contraindo o glúteo. Mantenha o abdômen contraído e evite arquear a lombar. Retorne controladamente.'
+    },
+    # [NOVO]
+    'Abdução de Quadril': {
+        'grupo': 'Pernas', # Ou 'Glúteos'
+        'tipo': 'Isolado',
+        'equipamento': 'Máquina/Elásticos/Peso Corporal',
+        'restricoes': [],
+        'descricao': 'Sentado na máquina abdutora, deitado de lado, ou em pé com elásticos/caneleiras. Afaste a(s) perna(s) lateralmente contra a resistência, focando no glúteo lateral (médio/mínimo). Retorne controladamente.'
+    },
+    # [NOVO]
+    'Glúteo Sapinho (Frog Pump)': {
+        'grupo': 'Pernas', # Ou 'Glúteos'
+        'tipo': 'Isolado',
+        'equipamento': 'Peso Corporal',
+        'restricoes': [],
+        'descricao': 'Deitado de costas, junte as solas dos pés e afaste os joelhos (posição de "sapo"). Calcanhares próximos aos glúteos. Eleve o quadril do chão, contraindo fortemente os glúteos. Desça controladamente.'
+     },
+    # Panturrilhas
+    'Panturrilha no Leg Press': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Sentado no Leg Press, ponta dos pés na parte inferior da plataforma, calcanhares para fora. Joelhos estendidos (não travados). Empurre a plataforma apenas com a flexão plantar. Retorne alongando.'
+    },
 
     # Peito
-    'Supino Reto com Barra': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros']},
-    'Supino Reto com Halteres': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': []},
-    'Supino Inclinado com Halteres': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres',
-                                      'restricoes': []},
-    'Crucifixo com Halteres': {'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
-    'Flexão de Braço': {'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos']},
+    'Supino Reto com Barra': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros'],
+        'descricao': 'Deitado no banco reto, pés firmes no chão. Pegada na barra um pouco mais larga que os ombros. Desça a barra controladamente até tocar levemente o meio do peito. Empurre a barra de volta para cima.'
+    },
+    'Supino Reto com Halteres': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Deitado no banco reto, segure os halteres acima do peito com as palmas para frente. Desça os halteres lateralmente, flexionando os cotovelos. Empurre os halteres de volta para cima.'
+    },
+    'Supino Inclinado com Halteres': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Deitado em um banco inclinado (30-45°). Movimento similar ao supino reto com halteres, mas descendo os pesos em direção à parte superior do peito.'
+    },
+    'Crucifixo com Halteres': {
+        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Deitado no banco reto, halteres acima do peito, palmas das mãos voltadas uma para a outra, cotovelos levemente flexionados. Abra os braços descendo os halteres lateralmente em um arco. Retorne à posição inicial contraindo o peito.'
+    },
+    'Flexão de Braço': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos'],
+        'descricao': 'Mãos no chão afastadas na largura dos ombros (ou um pouco mais). Corpo reto da cabeça aos calcanhares. Desça o peito flexionando os cotovelos. Empurre de volta à posição inicial.'
+    },
 
     # Costas
-    'Barra Fixa': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': []},
-    'Puxada Alta (Lat Pulldown)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
-    'Remada Curvada com Barra': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra',
-                                 'restricoes': ['Lombar']},
-    'Remada Sentada (máquina)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': []},
-    'Remada Unilateral (Serrote)': {'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': []},
+    'Barra Fixa': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'descricao': 'Pendure-se na barra com pegada pronada (palmas para frente) ou supinada (palmas para você), mãos afastadas na largura dos ombros ou mais. Puxe o corpo para cima até o queixo passar a barra, contraindo as costas. Desça controladamente.'
+    },
+    'Puxada Alta (Lat Pulldown)': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Sentado na máquina, ajuste o apoio dos joelhos. Pegada na barra mais larga que os ombros. Puxe a barra verticalmente em direção à parte superior do peito, mantendo o tronco estável e contraindo as costas. Retorne controladamente.'
+    },
+    'Remada Curvada com Barra': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'descricao': 'Incline o tronco à frente (45-60°), mantendo a coluna reta e os joelhos levemente flexionados. Pegada pronada na barra. Puxe a barra em direção ao abdômen/peito baixo, contraindo as costas. Desça controladamente.'
+    },
+    'Remada Sentada (máquina)': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Sentado na máquina com o peito apoiado (se houver). Puxe as manoplas/pegadores em direção ao corpo, mantendo os cotovelos próximos ao tronco e contraindo as escápulas. Retorne controladamente.'
+    },
+    'Remada Unilateral (Serrote)': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Apoie um joelho e a mão do mesmo lado em um banco. Mantenha o tronco paralelo ao chão e a coluna reta. Com o outro braço, puxe o halter em direção ao quadril/costela, mantendo o cotovelo próximo ao corpo. Desça controladamente.'
+    },
 
     # Ombros
-    'Desenvolvimento Militar com Barra': {'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra',
-                                          'restricoes': ['Lombar', 'Ombros']},
-    'Desenvolvimento com Halteres (sentado)': {'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres',
-                                               'restricoes': []},
-    'Elevação Lateral': {'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
-    'Elevação Frontal': {'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
+    'Desenvolvimento Militar com Barra': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Ombros'],
+        'descricao': 'Em pé (ou sentado), barra apoiada na parte superior do peito, pegada pronada um pouco mais larga que os ombros. Empurre a barra verticalmente para cima até estender os cotovelos. Desça controladamente até a posição inicial.'
+    },
+    'Desenvolvimento com Halteres (sentado)': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Sentado em um banco com encosto, segure os halteres na altura dos ombros com as palmas para frente. Empurre os halteres verticalmente para cima. Desça controladamente.'
+    },
+    'Elevação Lateral': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Em pé, segure halteres ao lado do corpo. Mantenha os cotovelos levemente flexionados. Eleve os braços lateralmente até a altura dos ombros. Desça controladamente.'
+    },
+    'Elevação Frontal': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Em pé, segure halteres na frente das coxas (pegada pronada ou neutra). Eleve um braço de cada vez (ou ambos) para frente, mantendo o cotovelo levemente flexionado, até a altura dos ombros. Desça controladamente.'
+    },
 
     # Bíceps
-    'Rosca Direta com Barra': {'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': ['Punhos']},
-    'Rosca Direta com Halteres': {'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
-    'Rosca Martelo': {'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': []},
+    'Rosca Direta com Barra': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': ['Punhos'],
+        'descricao': 'Em pé, segure a barra com pegada supinada (palmas para cima), mãos na largura dos ombros. Mantenha os cotovelos fixos ao lado do corpo. Flexione os cotovelos trazendo a barra em direção aos ombros. Desça controladamente.'
+    },
+    'Rosca Direta com Halteres': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Em pé (ou sentado), segure halteres ao lado do corpo com pegada supinada. Mantenha os cotovelos fixos. Flexione os cotovelos, elevando os halteres. Pode ser feito simultaneamente ou alternadamente. Desça controladamente.'
+    },
+    'Rosca Martelo': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'descricao': 'Em pé (ou sentado), segure halteres ao lado do corpo com pegada neutra (palmas voltadas para o corpo). Mantenha os cotovelos fixos. Flexione os cotovelos, elevando os halteres. Desça controladamente.'
+    },
 
     # Tríceps
-    'Tríceps Testa': {'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres',
-                      'restricoes': ['Cotovelos']},
-    'Tríceps Pulley': {'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': []},
-    'Mergulho no Banco': {'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal',
-                          'restricoes': ['Ombros', 'Punhos']},
+    'Tríceps Testa': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': ['Cotovelos'],
+        'descricao': 'Deitado em um banco reto, segure uma barra W (ou halteres com pegada neutra) acima do peito com os braços estendidos. Mantenha os braços (úmeros) parados. Flexione os cotovelos descendo o peso em direção à testa/cabeça. Estenda os cotovelos de volta à posição inicial.'
+    },
+    'Tríceps Pulley': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'descricao': 'Em pé, de frente para la polia alta, segure a barra ou corda com pegada pronada (ou neutra na corda). Mantenha os cotovelos fixos ao lado do corpo. Estenda completamente os cotovelos empurrando a barra/corda para baixo. Retorne controladamente.'
+    },
+    'Mergulho no Banco': {
+        'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Ombros', 'Punhos'],
+        'descricao': 'Apoie as mãos em um banco atrás do corpo, dedos para frente. Mantenha as pernas estendidas à frente (ou joelhos flexionados para facilitar). Flexione os cotovelos descendo o corpo verticalmente. Empurre de volta para cima estendendo os cotovelos.'
+    },
 
     # Core
-    'Prancha': {'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': []},
-    'Abdominal Crunch': {'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': []},
-    'Elevação de Pernas': {'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal',
-                           'restricoes': ['Lombar']},
+    'Prancha': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'descricao': 'Apoie os antebraços e as pontas dos pés no chão. Mantenha o corpo reto da cabeça aos calcanhares, contraindo o abdômen e os glúteos. Evite elevar ou baixar demais o quadril. Sustente a posição.'
+    },
+    'Abdominal Crunch': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'descricao': 'Deitado de costas, joelhos flexionados e pés no chão (ou pernas elevadas). Mãos atrás da cabeça (sem puxar) ou cruzadas no peito. Eleve a cabeça e os ombros do chão, contraindo o abdômen ("enrolando" a coluna). Retorne controladamente.'
+    },
+    'Elevação de Pernas': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'descricao': 'Deitado de costas, pernas estendidas. Pode colocar as mãos sob a lombar para apoio. Mantendo as pernas retas (ou levemente flexionadas), eleve-as até formarem 90° com o tronco. Desça controladamente quase até o chão, sem deixar a lombar arquear.'
+     },
+    # [NOVO]
+    'Superman': {
+        'grupo': 'Core', # Trabalha eretores da espinha, glúteos
+        'tipo': 'Isolado',
+        'equipamento': 'Peso Corporal',
+        'restricoes': ['Lombar'], # Risco de hiperextensão
+        'descricao': 'Deitado de bruços, braços e pernas estendidos. Eleve simultaneamente braços, peito e pernas do chão, contraindo lombar e glúteos. Mantenha por um instante e retorne controladamente.'
+     },
 }
 
 EXERCISE_SUBSTITUTIONS = {
@@ -808,71 +933,120 @@ def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
 
 
 def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None) -> Dict:
+    # Pega os dados do usuário, incluindo o sexo
     nivel = dados_usuario.get('nivel', 'Iniciante')
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
+    sexo = dados_usuario.get('sexo', 'Masculino') # Pega o sexo, padrão Masculino se não existir
 
+    # Define séries/reps/descanso base (como antes)
     if fase_atual:
         series_base, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
     else:
-        if objetivo == 'Hipertrofia':
-            series_base, reps_base, descanso_base = '3-4', '8-12', '60-90s'
-        elif objetivo == 'Emagrecimento':
-            series_base, reps_base, descanso_base = '3', '12-15', '45-60s'
-        else:
-            series_base, reps_base, descanso_base = '3', '15-20', '30-45s'
+        if objetivo == 'Hipertrofia': series_base, reps_base, descanso_base = '3-4', '8-12', '60-90s'
+        elif objetivo == 'Emagrecimento': series_base, reps_base, descanso_base = '3', '12-15', '45-60s'
+        else: series_base, reps_base, descanso_base = '3', '15-20', '30-45s'
 
+    # Função selecionar_exercicios (permanece igual, com correção de restrição)
     def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int) -> List[Dict]:
         exercicios_selecionados = []
         candidatos_validos = []
         for ex_nome, ex_data in EXERCICIOS_DB.items():
-            if ex_data['grupo'] in grupos:
-                if any(r in ex_data.get('restricoes', []) for r in restricoes_usr):
+            if ex_data.get('grupo') in grupos:
+                exercicio_tem_restricao = any(r in ex_data.get('restricoes', []) for r in restricoes_usr)
+                if exercicio_tem_restricao:
                     substituto = EXERCISE_SUBSTITUTIONS.get(ex_nome)
-                    if substituto and substituto not in candidatos_validos:
-                        candidatos_validos.append(substituto)
-                else:
+                    if substituto:
+                        sub_details = EXERCICIOS_DB.get(substituto, {})
+                        if substituto not in candidatos_validos and not any(r in sub_details.get('restricoes', []) for r in restricoes_usr):
+                            candidatos_validos.append(substituto)
+                elif ex_nome not in candidatos_validos:
                     candidatos_validos.append(ex_nome)
+
         candidatos = list(set(candidatos_validos))
-        compostos = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto'][:n_compostos]
-        isolados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto' and ex not in compostos][
-                   :n_isolados]
-        for ex in compostos + isolados:
-            exercicios_selecionados.append(
-                {'Exercício': ex, 'Séries': series_base.split('-')[-1], 'Repetições': reps_base,
-                 'Descanso': descanso_base})
+        compostos_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto']
+        isolados_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto']
+        compostos_finais = compostos_selecionados[:n_compostos]
+        isolados_finais = isolados_selecionados[:n_isolados]
+        exercicios_finais = compostos_finais + isolados_finais
+        total_desejado = n_compostos + n_isolados
+        if len(exercicios_finais) < total_desejado:
+            faltantes = total_desejado - len(exercicios_finais)
+            if len(isolados_finais) < n_isolados and len(compostos_selecionados) > len(compostos_finais):
+                 extras = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes]
+                 exercicios_finais.extend(extras); faltantes -= len(extras)
+            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(isolados_finais):
+                 extras = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes]
+                 exercicios_finais.extend(extras)
+
+        for ex in exercicios_finais:
+             exercicios_selecionados.append({'Exercício': ex, 'Séries': series_base.split('-')[-1], 'Repetições': reps_base, 'Descanso': descanso_base})
         return exercicios_selecionados
 
     plano = {}
-    # --- LÓGICA ALTERADA AQUI ---
-    if dias <= 2:  # Agora, a verificação é apenas pelo número de dias
+    # --- LÓGICA DE DIVISÃO AGORA CONSIDERA O SEXO ---
+    if dias <= 2:
+        # Treino AB Full Body para baixa frequência (igual para ambos)
         plano['Treino A: Corpo Inteiro'] = selecionar_exercicios(['Peito', 'Costas', 'Pernas', 'Ombros'], 3, 1)
-        plano['Treino B: Corpo Inteiro'] = selecionar_exercicios(['Pernas', 'Costas', 'Peito', 'Bíceps', 'Tríceps'], 3,
-                                                                 2)
-    elif dias == 3:
-        plano['Treino A: Superiores (Push)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 2, 3)
-        plano['Treino B: Inferiores'] = selecionar_exercicios(['Pernas'], 2, 3)
-        plano['Treino C: Superiores (Pull)'] = selecionar_exercicios(['Costas', 'Bíceps'], 2, 2)
-    elif dias == 4:
-        plano['Treino A: Superiores (Foco Peito/Costas)'] = selecionar_exercicios(['Peito', 'Costas', 'Bíceps'], 3, 2)
-        plano['Treino B: Inferiores (Foco Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
-        plano['Treino C: Superiores (Foco Ombros/Braços)'] = selecionar_exercicios(['Ombros', 'Tríceps', 'Bíceps'], 2,
-                                                                                   3)
-        plano['Treino D: Inferiores (Foco Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3)
-    elif dias >= 5:
-        plano['Treino A: Peito'] = selecionar_exercicios(['Peito'], 2, 2)
-        plano['Treino B: Costas'] = selecionar_exercicios(['Costas'], 2, 2)
-        plano['Treino C: Pernas'] = selecionar_exercicios(['Pernas'], 2, 3)
-        plano['Treino D: Ombros'] = selecionar_exercicios(['Ombros'], 2, 2)
-        plano['Treino E: Braços & Core'] = selecionar_exercicios(['Bíceps', 'Tríceps', 'Core'], 0, 4)
+        plano['Treino B: Corpo Inteiro'] = selecionar_exercicios(['Pernas', 'Costas', 'Peito', 'Bíceps', 'Tríceps'], 3, 2)
 
-    for nome, exercicios in plano.items():
-        if exercicios:
-            plano[nome] = pd.DataFrame(exercicios)
-        else:
-            plano[nome] = pd.DataFrame()
-    return plano
+    elif dias == 3:
+        # Treino ABC (Push/Pull/Legs ou variações)
+        if sexo == 'Feminino':
+             # Ênfase ligeiramente maior em pernas/glúteos
+             plano['Treino A: Superiores'] = selecionar_exercicios(['Peito', 'Costas', 'Ombros'], 2, 2) # Mix Push/Pull
+             plano['Treino B: Inferiores (Foco Quadríceps/Glúteo)'] = selecionar_exercicios(['Pernas'], 2, 3) # Mais volume
+             plano['Treino C: Inferiores (Foco Posterior/Glúteo)'] = selecionar_exercicios(['Pernas'], 2, 3) # Outro dia com mais volume
+        else: # Masculino (ou padrão)
+             plano['Treino A: Superiores (Push)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 2, 3)
+             plano['Treino B: Inferiores'] = selecionar_exercicios(['Pernas'], 2, 3)
+             plano['Treino C: Superiores (Pull)'] = selecionar_exercicios(['Costas', 'Bíceps'], 2, 2)
+
+    elif dias == 4:
+        # Treino ABCD (Upper/Lower ou variações)
+        if sexo == 'Feminino':
+             # Mantém Upper/Lower, mas ajusta a seleção dentro de 'selecionar_exercicios' (indiretamente, se adicionarmos mais ex. de glúteo)
+             # Poderia adicionar um 3º composto em um dos dias de perna
+             plano['Treino A: Superiores (Geral)'] = selecionar_exercicios(['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps'], 3, 2)
+             plano['Treino B: Inferiores (Foco Quadríceps/Glúteo)'] = selecionar_exercicios(['Pernas'], 3, 2) # 3 compostos
+             plano['Treino C: Superiores (Geral)'] = selecionar_exercicios(['Costas', 'Peito', 'Ombros', 'Bíceps', 'Tríceps'], 3, 2) # Variação do A
+             plano['Treino D: Inferiores (Foco Posterior/Glúteo)'] = selecionar_exercicios(['Pernas'], 2, 3) # 2 compostos + isolados
+        else: # Masculino (ou padrão)
+             plano['Treino A: Superiores (Foco Peito/Costas)'] = selecionar_exercicios(['Peito', 'Costas', 'Bíceps'], 3, 2)
+             plano['Treino B: Inferiores (Foco Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
+             plano['Treino C: Superiores (Foco Ombros/Braços)'] = selecionar_exercicios(['Ombros', 'Tríceps', 'Bíceps'], 2, 3)
+             plano['Treino D: Inferiores (Foco Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3)
+
+    elif dias >= 5:
+        # Treino ABCDE (Split por grupo)
+        if sexo == 'Feminino':
+             # Foco maior em membros inferiores e glúteos
+             plano['Treino A: Inferiores (Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
+             plano['Treino B: Superiores (Push)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 2, 2)
+             plano['Treino C: Inferiores (Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3) # Adicionar Elevação Pélvica aqui!
+             plano['Treino D: Superiores (Pull)'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 1)
+             plano['Treino E: Glúteos & Core'] = selecionar_exercicios(['Pernas', 'Core'], 1, 3) # Foco em isolados para glúteo se disponíveis
+             # Tenta adicionar Elevação Pélvica se não estiver já no treino C ou E
+             if 'Elevação Pélvica' not in [ex['Exercício'] for ex in plano['Treino C: Inferiores (Posterior/Glúteos)']] and \
+                'Elevação Pélvica' not in [ex['Exercício'] for ex in plano['Treino E: Glúteos & Core']]:
+                  # Adiciona no dia C se houver espaço, senão no E
+                  if len(plano['Treino C: Inferiores (Posterior/Glúteos)']) < 6: # Limite arbitrário de exercícios
+                       plano['Treino C: Inferiores (Posterior/Glúteos)'].append({'Exercício': 'Elevação Pélvica', 'Séries': series_base.split('-')[-1], 'Repetições': reps_base, 'Descanso': descanso_base})
+                  elif len(plano['Treino E: Glúteos & Core']) < 5:
+                       plano['Treino E: Glúteos & Core'].append({'Exercício': 'Elevação Pélvica', 'Séries': series_base.split('-')[-1], 'Repetições': reps_base, 'Descanso': descanso_base})
+
+        else: # Masculino (ou padrão)
+             plano['Treino A: Peito'] = selecionar_exercicios(['Peito'], 2, 2)
+             plano['Treino B: Costas'] = selecionar_exercicios(['Costas'], 4, 0)
+             plano['Treino C: Pernas'] = selecionar_exercicios(['Pernas'], 2, 3)
+             plano['Treino D: Ombros'] = selecionar_exercicios(['Ombros'], 2, 2)
+             plano['Treino E: Braços & Core'] = selecionar_exercicios(['Bíceps', 'Tríceps', 'Core'], 0, 4)
+
+    plano_final = {}
+    for nome, exercicios_lista in plano.items():
+        plano_final[nome] = exercicios_lista if exercicios_lista else []
+    return plano_final
 
 
 # ---------------------------
@@ -1039,7 +1213,6 @@ def render_workout_session():
             st.header(nome_exercicio)
             st.markdown(
                 f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`\n**Descanso:** `{exercicio_atual['Descanso']}`")
-    st.subheader("Registre suas séries")
     for i in range(num_series):
         set_key = f"set_{idx_atual}_{i}"
         if set_key not in st.session_state: st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
@@ -1260,19 +1433,25 @@ def render_questionario():
             idade = st.number_input("Idade", 12, 100, value=dados.get('idade', 25))
             peso = st.number_input("Peso (kg)", 30.0, 200.0, value=dados.get('peso', 70.0), step=0.1)
             altura = st.number_input("Altura (cm)", 100.0, 250.0, value=dados.get('altura', 170.0), step=0.1)
+            # [NOVO] Campo Sexo
+            sexo = st.selectbox("Sexo", ["Masculino", "Feminino"], index=0 if dados.get('sexo', 'Masculino') == 'Masculino' else 1)
+
         with col2:
             nivel = st.selectbox("Qual seu nível de experiência?", ["Iniciante", "Intermediário/Avançado"],
                                  index=0 if dados.get('nivel') == 'Iniciante' else 1)
             objetivo = st.selectbox("Qual seu objetivo principal?", ["Hipertrofia", "Emagrecimento", "Condicionamento"],
-                                    index=["Hipertrofia", "Emagrecimento", "Condicionamento"].index(
-                                        dados.get('objetivo', 'Hipertrofia')))
+                                      index=["Hipertrofia", "Emagrecimento", "Condicionamento"].index(
+                                          dados.get('objetivo', 'Hipertrofia')))
             dias = st.slider("Quantos dias por semana pode treinar?", 2, 6, value=dados.get('dias_semana', 3))
+
         restricoes = st.multiselect("Possui alguma dor ou restrição nas seguintes áreas?",
                                     ["Lombar", "Joelhos", "Ombros", "Cotovelos", "Punhos"],
                                     default=dados.get('restricoes', []))
+
         if st.form_submit_button("Salvar Perfil e Gerar Treino"):
-            novos_dados = {'nome': nome, 'idade': idade, 'peso': peso, 'altura': altura, 'nivel': nivel,
-                           'objetivo': objetivo, 'dias_semana': dias, 'restricoes': restricoes,
+            # [MODIFICADO] Adiciona 'sexo' aos novos dados
+            novos_dados = {'nome': nome, 'idade': idade, 'peso': peso, 'altura': altura, 'sexo': sexo, # <- Adicionado
+                           'nivel': nivel, 'objetivo': objetivo, 'dias_semana': dias, 'restricoes': restricoes,
                            'data_cadastro': iso_now()}
             st.session_state['dados_usuario'] = novos_dados
             hp = st.session_state.get('historico_peso', [])
@@ -1283,7 +1462,8 @@ def render_questionario():
                 st.session_state['plano_treino'] = gerar_plano_personalizado(novos_dados)
                 time.sleep(1)
             uid = st.session_state.get('user_uid')
-            if uid: salvar_dados_usuario_firebase(uid)
+            if uid:
+                salvar_dados_usuario_firebase(uid)
             st.success("Perfil salvo e plano de treino personalizado gerado com sucesso!")
             st.info("Acesse a página 'Meu Treino' para visualizar.")
 
@@ -1314,69 +1494,65 @@ def render_meu_treino():
     st.markdown("---")
 
     # Itera sobre o dicionário do plano de treino
-    for nome_treino, treino_data in plano.items(): # Renomeado df_treino_dict para treino_data
-
-        # --- CORREÇÃO PRINCIPAL ---
-        # Garante que df_treino seja um DataFrame, tratando se treino_data já é um DF ou uma lista
+    for nome_treino, treino_data in plano.items():
+        # ... (lógica para criar df_treino e botão Iniciar Treino igual) ...
         if isinstance(treino_data, pd.DataFrame):
             df_treino = treino_data
         elif isinstance(treino_data, list):
-             df_treino = pd.DataFrame(treino_data) # Converte lista de dicts para DF
+            df_treino = pd.DataFrame(treino_data)
         else:
-            df_treino = pd.DataFrame() # Cria DF vazio se o dado for inválido (None, etc.)
+            df_treino = pd.DataFrame()
+        if df_treino.empty: continue
 
-        # Agora, a verificação com .empty funciona corretamente
-        if df_treino.empty:
-            continue # Pula para o próximo treino se este não tiver exercícios
-        # --- FIM DA CORREÇÃO ---
-
-        # O restante da renderização continua igual...
-        col1, col2 = st.columns([3, 1])
-        with col1:
+        col1_header, col2_header = st.columns([3, 1])
+        with col1_header:
             st.subheader(nome_treino)
             st.caption(f"{len(df_treino)} exercícios")
-        with col2:
+        with col2_header:
             if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
-                st.session_state.update({
-                    'workout_in_progress': True,
-                    'current_workout_plan': df_treino.to_dict('records'), # Salva como lista para a sessão
-                    'current_exercise_index': 0,
-                    'workout_log': [],
-                    'rest_timer_end': None
-                })
+                st.session_state.update(
+                    {'workout_in_progress': True, 'current_workout_plan': df_treino.to_dict('records'),
+                     'current_exercise_index': 0, 'workout_log': [], 'rest_timer_end': None})
                 st.rerun()
 
         for index, row in df_treino.iterrows():
-            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row['Descanso']
+            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row[
+                'Descanso']
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col_media, col_instr = st.columns([1, 2])  # Ajuste da proporção para [1, 2]
+                col_media, col_instr = st.columns([1, 2])  # Proporção ajustada
 
-                # --- Coluna da Mídia (com link_button) ---
-                with col_media:  # Certifique-se que esta linha está correta
+                with col_media:
                     video_url = find_exercise_video_youtube(exercicio)
                     if video_url:
-                        # Usando st.link_button em vez de st.video
                         st.link_button("🎥 Assistir Execução", video_url)
                         st.caption(f"Abre o vídeo de {exercicio} no YouTube")
                     else:
-                        st.info("Vídeo de execução indisponível.")
+                        st.info("Vídeo indisponível.")
 
-                # --- Coluna das Instruções ---
                 with col_instr:
                     st.markdown("##### 📋 **Instruções**")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
                     st.markdown("---")
-                    st.write(f"**Grupo Muscular:** {EXERCICIOS_DB.get(exercicio, {}).get('grupo', 'N/A')}")
-                    st.write(f"**Equipamento:** {EXERCICIOS_DB.get(exercicio, {}).get('equipamento', 'N/A')}")
-                    st.button("🔄 Trocar Exercício",
-                              key=f"swap_{nome_treino}_{index}",
-                              on_click=trocar_exercicio,
-                              args=(nome_treino, index, exercicio),
-                              use_container_width=True)
 
-            # (O st.markdown("---") vem depois do expander)
-        st.markdown("---")  # Fim do loop for index, row.
+                    # Busca dados do exercício, incluindo a nova descrição
+                    ex_data = EXERCICIOS_DB.get(exercicio, {})
+                    grupo_muscular = ex_data.get('grupo', 'N/A')
+                    equipamento = ex_data.get('equipamento', 'N/A')
+                    descricao_exercicio = ex_data.get('descricao')  # <-- Pega a descrição
+
+                    st.write(f"**Grupo Muscular:** {grupo_muscular}")
+                    st.write(f"**Equipamento:** {equipamento}")
+
+                    # [NOVO] Exibe a descrição se ela existir
+                    if descricao_exercicio:
+                        st.markdown("---")  # Separador visual
+                        st.markdown(f"**📝 Como Fazer:**\n{descricao_exercicio}")
+
+                    st.markdown(" ")  # Espaço antes do botão
+                    st.button("🔄 Trocar Exercício", key=f"swap_{nome_treino}_{index}", on_click=trocar_exercicio,
+                              args=(nome_treino, index, exercicio), use_container_width=True)
+        st.markdown("---")  # Fim do loop for index, row...
 
 
 def render_registrar_treino():
