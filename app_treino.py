@@ -1472,17 +1472,13 @@ def render_meu_treino():
     st.title("💪 Meu Treino")
     plano = st.session_state.get('plano_treino')
 
-    # Checagem inicial mais robusta para plano vazio
     plano_vazio = True
     if plano and isinstance(plano, dict):
         for nome_treino, treino_data in plano.items():
-            # Verifica se é um DataFrame não vazio ou uma lista não vazia de dicionários
             if isinstance(treino_data, pd.DataFrame) and not treino_data.empty:
-                plano_vazio = False
-                break
+                plano_vazio = False; break
             elif isinstance(treino_data, list) and treino_data and all(isinstance(item, dict) for item in treino_data):
-                 plano_vazio = False
-                 break # Encontrou dados válidos, pode parar de checar
+                plano_vazio = False; break
 
     if not plano or plano_vazio:
         st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
@@ -1493,66 +1489,83 @@ def render_meu_treino():
         f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
     st.markdown("---")
 
-    # Itera sobre o dicionário do plano de treino
     for nome_treino, treino_data in plano.items():
-        # ... (lógica para criar df_treino e botão Iniciar Treino igual) ...
         if isinstance(treino_data, pd.DataFrame):
             df_treino = treino_data
         elif isinstance(treino_data, list):
             df_treino = pd.DataFrame(treino_data)
         else:
             df_treino = pd.DataFrame()
+
         if df_treino.empty: continue
 
-        col1_header, col2_header = st.columns([3, 1])
-        with col1_header:
+        col1, col2 = st.columns([3, 1])
+        with col1:
             st.subheader(nome_treino)
             st.caption(f"{len(df_treino)} exercícios")
-        with col2_header:
+        with col2:
+            # Botão para iniciar o modo interativo (existente)
             if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
                 st.session_state.update(
                     {'workout_in_progress': True, 'current_workout_plan': df_treino.to_dict('records'),
                      'current_exercise_index': 0, 'workout_log': [], 'rest_timer_end': None})
                 st.rerun()
 
+            # --- NOVO BOTÃO ADICIONADO ABAIXO ---
+            if st.button("✅ Marcar Concluído", key=f"quick_complete_{nome_treino}", use_container_width=True):
+                hoje = date.today()  # Pega a data atual
+                frequencia_atual = st.session_state.get('frequencia', [])
+
+                # Verifica se o treino de hoje já foi contabilizado
+                if hoje not in frequencia_atual:
+                    frequencia_atual.append(hoje)  # Adiciona data à lista
+                    st.session_state['frequencia'] = frequencia_atual  # Atualiza o estado da sessão
+
+                    # Salva a alteração no Firebase
+                    salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+
+                    st.toast(f"Ótimo! Treino '{nome_treino}' contabilizado para hoje.")
+
+                    # Opcional: Forçar re-run para atualizar contadores no dashboard imediatamente
+                    # time.sleep(1) # Pequena pausa para o toast ser visível
+                    # st.rerun()
+                else:
+                    # Informa que já foi contabilizado
+                    st.toast("O treino de hoje já foi contabilizado!")
+            st.caption("Marca o dia como treinado.")  # Legenda explicativa
+            # --- FIM DO NOVO BOTÃO ---
+
+        # O restante do código (expanders, vídeos, etc.) permanece igual
         for index, row in df_treino.iterrows():
             exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row[
                 'Descanso']
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col_media, col_instr = st.columns([1, 2])  # Proporção ajustada
-
+                col_media, col_instr = st.columns([1, 2])
                 with col_media:
                     video_url = find_exercise_video_youtube(exercicio)
                     if video_url:
                         st.link_button("🎥 Assistir Execução", video_url)
                         st.caption(f"Abre o vídeo de {exercicio} no YouTube")
                     else:
-                        st.info("Vídeo indisponível.")
-
+                        st.info("Vídeo de execução indisponível.")
                 with col_instr:
                     st.markdown("##### 📋 **Instruções**")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
                     st.markdown("---")
-
-                    # Busca dados do exercício, incluindo a nova descrição
                     ex_data = EXERCICIOS_DB.get(exercicio, {})
                     grupo_muscular = ex_data.get('grupo', 'N/A')
                     equipamento = ex_data.get('equipamento', 'N/A')
-                    descricao_exercicio = ex_data.get('descricao')  # <-- Pega a descrição
-
+                    descricao_exercicio = ex_data.get('descricao')
                     st.write(f"**Grupo Muscular:** {grupo_muscular}")
                     st.write(f"**Equipamento:** {equipamento}")
-
-                    # [NOVO] Exibe a descrição se ela existir
                     if descricao_exercicio:
-                        st.markdown("---")  # Separador visual
+                        st.markdown("---")
                         st.markdown(f"**📝 Como Fazer:**\n{descricao_exercicio}")
-
-                    st.markdown(" ")  # Espaço antes do botão
+                    st.markdown(" ")
                     st.button("🔄 Trocar Exercício", key=f"swap_{nome_treino}_{index}", on_click=trocar_exercicio,
                               args=(nome_treino, index, exercicio), use_container_width=True)
-        st.markdown("---")  # Fim do loop for index, row...
+        st.markdown("---")
 
 
 def render_registrar_treino():
@@ -1822,6 +1835,8 @@ def render_busca():
 
 def render_export_backup():
     st.title("📤 Export / Backup")
+
+    # --- Secção de Backup (existente) ---
     payload = {k: st.session_state.get(k) for k in
                ['dados_usuario', 'frequencia', 'historico_treinos', 'metas', 'fotos_progresso', 'medidas']}
     payload['plano_treino'] = plan_to_serial(st.session_state.get('plano_treino'))
@@ -1829,13 +1844,65 @@ def render_export_backup():
     st.download_button("📥 Baixar backup JSON", data=js, file_name="fitpro_backup.json", mime="application/json")
     if st.session_state.get('historico_treinos'):
         df = pd.DataFrame(st.session_state['historico_treinos'])
-        st.download_button("📥 Exportar histórico CSV", data=df.to_csv(index=False), file_name="historico_treinos.csv",
-                           mime="text/csv")
+        st.download_button("📥 Exportar histórico CSV", data=df.to_csv(index=False), file_name="historico_treinos.csv", mime="text/csv")
+
+    # Botão para criar backup online
     if st.button("Criar backup na coleção 'backups'"):
         uid = st.session_state.get('user_uid')
-        if uid:
-            db.collection('backups').add({'uid': uid, 'payload': payload, 'created': datetime.now()})
-            st.success("Backup criado na coleção 'backups'.")
+        if uid and uid != 'demo-uid':
+            try:
+                db.collection('backups').add({'uid': uid, 'payload': payload, 'created': datetime.now()})
+                st.success("Backup criado na coleção 'backups'.")
+            except Exception as e:
+                st.error(f"Erro ao criar backup online: {e}")
+        elif uid == 'demo-uid':
+             st.info("Backup online não disponível para modo demo.")
+        else:
+             st.error("Usuário não identificado para backup online.")
+
+    # --- [CORREÇÃO DE INDENTAÇÃO AQUI] ---
+    # Este bloco inteiro foi movido um nível para a esquerda
+    st.markdown("---") # Separador visual
+
+    st.subheader("⚠️ Resetar Progresso")
+    st.warning("Atenção: Esta ação apagará permanentemente todo o seu histórico de frequência e treinos registrados. Use com cuidado.")
+
+    if 'confirm_reset' not in st.session_state:
+        st.session_state.confirm_reset = False
+
+    if st.session_state.confirm_reset:
+        st.error("Tem certeza que deseja apagar todo o progresso? Esta ação não pode ser desfeita.")
+        col1, col2, _ = st.columns([1,1,3])
+        with col1:
+            if st.button("✅ Sim, apagar tudo", type="primary", use_container_width=True):
+                uid = st.session_state.get('user_uid')
+                if uid and uid != 'demo-uid':
+                    with st.spinner("Apagando progresso..."):
+                        st.session_state['frequencia'] = []
+                        st.session_state['historico_treinos'] = []
+                        st.session_state['ciclo_atual'] = None
+                        salvar_dados_usuario_firebase(uid)
+                    st.success("Progresso resetado com sucesso!")
+                    st.session_state.confirm_reset = False
+                    time.sleep(1)
+                    st.rerun()
+                elif uid == 'demo-uid':
+                    st.info("Reset não aplicável ao modo demo.")
+                    st.session_state.confirm_reset = False
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Usuário não identificado para reset.")
+                    st.session_state.confirm_reset = False
+
+        with col2:
+            if st.button("❌ Cancelar", use_container_width=True):
+                st.session_state.confirm_reset = False
+                st.rerun()
+    else:
+        if st.button("Resetar Histórico de Treinos", type="secondary"):
+            st.session_state.confirm_reset = True
+            st.rerun()
 
 
 def render_admin_panel():
