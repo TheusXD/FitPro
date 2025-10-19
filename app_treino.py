@@ -1826,7 +1826,7 @@ def render_main():
     try:
         render_func()
     except NameError as e:
-        st.error(f"Erro: A função para a página '{page}' não foi encontrada.")
+        st.error(f"Erro: A função para asse página '{page}' não foi encontrada.")
         st.error(f"Detalhe: {e}")
         st.code(
             "Verifique se todas as suas funções 'render_...' (como render_fotos, render_medidas, etc.) estão definidas no seu código.")
