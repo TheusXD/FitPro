@@ -2302,27 +2302,48 @@ def salvar_dados_usuario_firebase(uid: str):
                     else:
                         freq.append(d)
                 else:
-                    freq.append(d)
+                    freq.append(d) # Assume que já está no formato correto se não for date/datetime
 
             hist = []
             for t in st.session_state.get('historico_treinos', []):
                 copy = dict(t)
-                if 'data' in copy and isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
-                    copy['data'] = datetime.combine(copy['data'], datetime.min.time())
+                # Garante que a data no histórico seja datetime antes de salvar
+                if 'data' in copy:
+                    if isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
+                         copy['data'] = datetime.combine(copy['data'], datetime.min.time())
+                    elif isinstance(copy['data'], str): # Tenta converter string para datetime
+                        try:
+                            copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0])
+                        except ValueError:
+                            # Se a conversão falhar, mantém como está ou define um padrão
+                             pass # Ou logar um erro, dependendo da necessidade
                 hist.append(copy)
+
 
             metas_save = []
             for m in st.session_state.get('metas', []):
                 copy = dict(m)
                 if 'prazo' in copy and isinstance(copy['prazo'], date):
                     copy['prazo'] = datetime.combine(copy['prazo'], datetime.min.time())
+                elif 'prazo' in copy and isinstance(copy['prazo'], str): # Converte string
+                     try:
+                        copy['prazo'] = datetime.fromisoformat(copy['prazo'].split('T')[0])
+                     except ValueError:
+                         copy['prazo'] = None # Define como None se a string for inválida
                 metas_save.append(copy)
 
             fotos_save = []
             for f in st.session_state.get('fotos_progresso', []):
                 copy = dict(f)
+                # Mantém a data da foto como string ISO formatada
                 if 'data' in copy and isinstance(copy['data'], date):
                     copy['data'] = copy['data'].isoformat()
+                # Garante que 'timestamp' seja datetime
+                if 'timestamp' in copy and isinstance(copy['timestamp'], str):
+                     try:
+                         copy['timestamp'] = datetime.fromisoformat(copy['timestamp'])
+                     except ValueError:
+                         pass # Mantém como string se inválido
                 fotos_save.append(copy)
 
             payload = {
@@ -2338,11 +2359,16 @@ def salvar_dados_usuario_firebase(uid: str):
                 'ciclo_atual': st.session_state.get('ciclo_atual'),
                 'role': st.session_state.get('role'),
                 'settings': st.session_state.get('settings', {}),
-                'ultimo_save': datetime.now()
+                'ultimo_save': datetime.now(timezone.utc), # Usa UTC
+                'xp_total': st.session_state.get('xp_total', 0), # Inclui XP
+                'xp_semanal': st.session_state.get('xp_semanal', 0), # Inclui XP
+                'ultima_verificacao_semanal': st.session_state.get('ultima_verificacao_semanal') # Inclui data de reset
             }
 
-            # Usa set() em vez de update() para substituir completamente os dados
-            doc.set(payload, merge=True)
+            # ==================== CORREÇÃO AQUI ====================
+            # Removemos o 'merge=True'. Agora o set vai SOBRESCREVER o documento.
+            doc.set(payload)
+            # =======================================================
             time.sleep(0.4)
 
     except Exception as e:
