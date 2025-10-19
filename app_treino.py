@@ -57,6 +57,41 @@ from firebase_admin import credentials, auth, firestore
 os.environ["GRPC_VERBOSITY"] = "NONE"
 logging.getLogger("google").setLevel(logging.ERROR)
 
+
+def verificar_dataframe_valido(df):
+    """
+    Verifica se um DataFrame é válido para uso
+    """
+    if df is None:
+        return False
+    if not isinstance(df, pd.DataFrame):
+        return False
+    if df.empty:
+        return False
+    if 'Exercício' not in df.columns:
+        return False
+    return True
+
+
+def verificar_plano_valido(plano):
+    """
+    Verifica se o plano de treino é válido
+    """
+    if not plano or not isinstance(plano, dict):
+        return False
+
+    dias_validos = 0
+    for nome_treino, treino_data in plano.items():
+        if treino_data is not None:
+            if isinstance(treino_data, pd.DataFrame):
+                if verificar_dataframe_valido(treino_data):
+                    dias_validos += 1
+            elif isinstance(treino_data, list):
+                if len(treino_data) > 0:
+                    dias_validos += 1
+
+    return dias_validos > 0
+
 # ---------------------------
 # Streamlit compatibility
 # ---------------------------
@@ -75,10 +110,146 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
+st.markdown("""
+<style>
+    /* Remove o padding padrão do Streamlit */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+
+    /* Estiliza o selectbox de navegação */
+    div[data-testid="stSelectbox"] > div {
+        background-color: #f0f2f6;
+        border-radius: 10px;
+        padding: 5px;
+    }
+
+    /* Melhora o visual dos expansores */
+    .streamlit-expanderHeader {
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    /* Ajusta o header principal */
+    h1 {
+        color: #1f77b4;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ---------------------------
 # Helpers
 # ---------------------------
+def gerar_planejamento_automatico(dias_semana: int, plano_treino: Dict) -> Dict[str, str]:
+    """
+    Gera um planejamento semanal automático baseado no número de dias e plano de treino
+    Retorna um dicionário com {dia_da_semana: nome_do_treino}
+    """
+    if not plano_treino:
+        return {}
+
+    # Mapeamento de dias da semana
+    DIAS_SEMANA = {
+        0: "Segunda-feira",
+        1: "Terça-feira",
+        2: "Quarta-feira",
+        3: "Quinta-feira",
+        4: "Sexta-feira",
+        5: "Sábado",
+        6: "Domingo"
+    }
+
+    # Nomes dos treinos disponíveis
+    treinos_disponiveis = list(plano_treino.keys())
+
+    # Estratégias de distribuição baseadas no número de dias
+    if dias_semana == 1:
+        # 1 dia: Full Body
+        distribuicao = {0: treinos_disponiveis[0] if treinos_disponiveis else "Descanso"}
+
+    elif dias_semana == 2:
+        # 2 dias: AB (Superior/Inferior)
+        distribuicao = {
+            0: next((t for t in treinos_disponiveis if "Superior" in t or "Upper" in t),
+                    treinos_disponiveis[0] if treinos_disponiveis else "Descanso"),
+            3: next((t for t in treinos_disponiveis if "Inferior" in t or "Lower" in t),
+                    treinos_disponiveis[1] if len(treinos_disponiveis) > 1 else treinos_disponiveis[
+                        0] if treinos_disponiveis else "Descanso")
+        }
+
+    elif dias_semana == 3:
+        # 3 dias: PPL ou ABC
+        distribuicao = {}
+        treinos_utilizados = set()
+
+        for i, dia in enumerate([0, 2, 4]):  # Segunda, Quarta, Sexta
+            if i < len(treinos_disponiveis):
+                distribuicao[dia] = treinos_disponiveis[i]
+                treinos_utilizados.add(treinos_disponiveis[i])
+            else:
+                # Se não há treinos suficientes, repete o último disponível
+                distribuicao[dia] = treinos_disponiveis[-1] if treinos_disponiveis else "Descanso"
+
+    elif dias_semana == 4:
+        # 4 dias: Upper/Lower 2x
+        distribuicao = {}
+        upper_treinos = [t for t in treinos_disponiveis if
+                         "Superior" in t or "Upper" in t or "Push" in t or "Peito" in t or "Costas" in t]
+        lower_treinos = [t for t in treinos_disponiveis if
+                         "Inferior" in t or "Lower" in t or "Pernas" in t or "Legs" in t]
+
+        # Segunda: Upper A, Terça: Lower A, Quinta: Upper B, Sexta: Lower B
+        distribuicao[0] = upper_treinos[0] if upper_treinos else treinos_disponiveis[
+            0] if treinos_disponiveis else "Descanso"
+        distribuicao[1] = lower_treinos[0] if lower_treinos else treinos_disponiveis[1] if len(
+            treinos_disponiveis) > 1 else treinos_disponiveis[0] if treinos_disponiveis else "Descanso"
+        distribuicao[3] = upper_treinos[1] if len(upper_treinos) > 1 else upper_treinos[0] if upper_treinos else \
+        treinos_disponiveis[0] if treinos_disponiveis else "Descanso"
+        distribuicao[4] = lower_treinos[1] if len(lower_treinos) > 1 else lower_treinos[0] if lower_treinos else \
+        treinos_disponiveis[1] if len(treinos_disponiveis) > 1 else treinos_disponiveis[
+            0] if treinos_disponiveis else "Descanso"
+
+    elif dias_semana >= 5:
+        # 5+ dias: Distribuição inteligente com descanso estratégico
+        distribuicao = {}
+        treinos_cycle = cycle(treinos_disponiveis)
+
+        # Distribui os treinos ao longo da semana, evitando 3 dias consecutivos
+        dias_treino = []
+        for i in range(dias_semana):
+            if i == 0:
+                dias_treino.append(0)  # Segunda
+            elif i == 1:
+                dias_treino.append(1)  # Terça
+            elif i == 2:
+                dias_treino.append(3)  # Quinta
+            elif i == 3:
+                dias_treino.append(4)  # Sexta
+            elif i == 4:
+                dias_treino.append(5)  # Sábado
+            elif i == 5:
+                dias_treino.append(6)  # Domingo
+            else:
+                # Para mais de 6 dias, preenche os dias restantes
+                for dia in range(7):
+                    if dia not in dias_treino:
+                        dias_treino.append(dia)
+                        break
+
+        for dia in sorted(dias_treino):
+            distribuicao[dia] = next(treinos_cycle)
+
+    # Preenche os dias não utilizados com "Descanso"
+    planejamento_completo = {}
+    for dia_num, dia_nome in DIAS_SEMANA.items():
+        if dia_num in distribuicao:
+            planejamento_completo[dia_nome] = distribuicao[dia_num]
+        else:
+            planejamento_completo[dia_nome] = "Descanso"
+
+    return planejamento_completo
+
 def iso_now() -> str:
     return datetime.now().isoformat()
 
@@ -170,9 +341,9 @@ def ensure_session_defaults():
         'medidas': [],
         'feedbacks': [],
         'ciclo_atual': None,
-        'role': 'free', # <-- Adicionado esta linha, default é 'free'
+        'role': 'free',
         'notificacoes': [],
-        'settings': {'theme': 'light', 'notify_on_login': True},
+        'settings': {'theme': 'light', 'notify_on_login': True},  # ← JÁ EXISTE
         'offline_mode': False,
         'confirm_excluir_foto': False,
         'foto_a_excluir': None,
@@ -184,9 +355,10 @@ def ensure_session_defaults():
         'warmup_in_progress': False,
         'cooldown_in_progress': False,
         'current_routine_exercise_index': 0,
-        'routine_timer_end': None, # Mantido caso queira reativar timer
-        'timer_finished_flag': False, # Mantido caso queira reativar timer
-        'confirm_reset': False, # Para a função de reset
+        'routine_timer_end': None,
+        'timer_finished_flag': False,
+        'confirm_reset': False,
+        'selected_page': 'Dashboard',  # ← ADICIONE ESTA LINHA
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -1639,11 +1811,14 @@ def plan_to_serial(plano: Optional[Dict[str, Any]]):
     out = {}
     for k, v in plano.items():
         if isinstance(v, pd.DataFrame):
-            out[k] = v.to_dict(orient='records')
+            # CORREÇÃO: Verificar se o DataFrame é válido antes de converter
+            if verificar_dataframe_valido(v):
+                out[k] = v.to_dict(orient='records')
+            else:
+                out[k] = []  # Retorna lista vazia se DataFrame inválido
         else:
             out[k] = v
     return out
-
 
 def serial_to_plan(serial: Optional[Dict[str, Any]]):
     if not serial:
@@ -1652,9 +1827,18 @@ def serial_to_plan(serial: Optional[Dict[str, Any]]):
     for k, v in serial.items():
         if isinstance(v, list):
             try:
-                out[k] = pd.DataFrame(v)
+                # CORREÇÃO: Verificar se a lista é válida antes de converter para DataFrame
+                if len(v) > 0 and all(isinstance(item, dict) for item in v) and all('Exercício' in item for item in v):
+                    df = pd.DataFrame(v)
+                    # CORREÇÃO: Verificar se o DataFrame resultante é válido
+                    if not df.empty and 'Exercício' in df.columns:
+                        out[k] = df
+                    else:
+                        out[k] = v  # Mantém como lista se conversão falhar
+                else:
+                    out[k] = v  # Mantém como lista se vazia ou inválida
             except Exception:
-                out[k] = v
+                out[k] = v  # Mantém como lista se conversão falhar
         else:
             out[k] = v
     return out
@@ -1666,10 +1850,38 @@ def serial_to_plan(serial: Optional[Dict[str, Any]]):
 def salvar_dados_usuario_firebase(uid: str):
     if not uid or uid == 'demo-uid':
         return
+
     try:
         with st.spinner("💾 Salvando dados no Firestore..."):
             doc = db.collection('usuarios').document(uid)
-            plano_serial = plan_to_serial(st.session_state.get('plano_treino'))
+
+            # ========== CORREÇÃO: Validação antes de salvar ==========
+            plano_para_salvar = st.session_state.get('plano_treino')
+            plano_serial_valido = None
+
+            if plano_para_salvar and isinstance(plano_para_salvar, dict):
+                # Filtra apenas treinos válidos
+                plano_filtrado = {}
+                for nome_treino, treino_data in plano_para_salvar.items():
+                    if treino_data is not None:
+                        # Se for DataFrame
+                        if isinstance(treino_data, pd.DataFrame):
+                            if (not treino_data.empty and
+                                    'Exercício' in treino_data.columns and
+                                    len(treino_data) > 0):
+                                plano_filtrado[nome_treino] = treino_data
+
+                        # Se for lista
+                        elif isinstance(treino_data, list):
+                            if (len(treino_data) > 0 and
+                                    all(isinstance(item, dict) for item in treino_data) and
+                                    all('Exercício' in item for item in treino_data)):
+                                plano_filtrado[nome_treino] = treino_data
+
+                if plano_filtrado:
+                    plano_serial_valido = plan_to_serial(plano_filtrado)
+            # ========================================================
+
             freq = []
             for d in st.session_state.get('frequencia', []):
                 if isinstance(d, (date, datetime)):
@@ -1679,27 +1891,31 @@ def salvar_dados_usuario_firebase(uid: str):
                         freq.append(d)
                 else:
                     freq.append(d)
+
             hist = []
             for t in st.session_state.get('historico_treinos', []):
                 copy = dict(t)
                 if 'data' in copy and isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
                     copy['data'] = datetime.combine(copy['data'], datetime.min.time())
                 hist.append(copy)
+
             metas_save = []
             for m in st.session_state.get('metas', []):
                 copy = dict(m)
                 if 'prazo' in copy and isinstance(copy['prazo'], date):
                     copy['prazo'] = datetime.combine(copy['prazo'], datetime.min.time())
                 metas_save.append(copy)
+
             fotos_save = []
             for f in st.session_state.get('fotos_progresso', []):
                 copy = dict(f)
                 if 'data' in copy and isinstance(copy['data'], date):
                     copy['data'] = copy['data'].isoformat()
                 fotos_save.append(copy)
+
             payload = {
                 'dados_usuario': st.session_state.get('dados_usuario'),
-                'plano_treino': plano_serial,
+                'plano_treino': plano_serial_valido,  # Usa apenas o plano válido
                 'frequencia': freq,
                 'historico_treinos': hist,
                 'historico_peso': st.session_state.get('historico_peso', []),
@@ -1712,36 +1928,223 @@ def salvar_dados_usuario_firebase(uid: str):
                 'settings': st.session_state.get('settings', {}),
                 'ultimo_save': datetime.now()
             }
+
             doc.set(payload, merge=True)
             time.sleep(0.4)
-        st.success("✅ Dados salvos!")
+
+        # st.success("✅ Dados salvos!")
+
     except Exception as e:
         st.error("Erro ao salvar no Firestore:")
         st.error(str(e))
 
 
 def carregar_dados_usuario_firebase(uid: str):
-    if not uid: return
+    if not uid:
+        return
+
     try:
-        with st.spinner("🔁 Carregando dados..."):
+        with st.spinner("🔍 Carregando dados..."):
             doc = db.collection('usuarios').document(uid).get()
             time.sleep(0.2)
-        if not doc.exists: return
+
+        if not doc.exists:
+            return
+
         data = doc.to_dict()
+
         st.session_state['dados_usuario'] = data.get('dados_usuario')
-        st.session_state['plano_treino'] = serial_to_plan(data.get('plano_treino'))
-        st.session_state['frequencia'] = [d.date() if isinstance(d, datetime) else d for d in data.get('frequencia', [])]
+
+        # CORREÇÃO: Validação mais robusta do plano carregado
+        plano_carregado = serial_to_plan(data.get('plano_treino'))
+
+        plano_valido = False
+        plano_limpo = {}
+
+        if plano_carregado and isinstance(plano_carregado, dict):
+            for nome_treino, treino_data in plano_carregado.items():
+                if treino_data is not None:
+                    # Se for DataFrame
+                    if isinstance(treino_data, pd.DataFrame):
+                        if (not treino_data.empty and
+                                'Exercício' in treino_data.columns and
+                                len(treino_data) > 0):
+                            plano_limpo[nome_treino] = treino_data
+                            plano_valido = True
+
+                    # Se for lista
+                    elif isinstance(treino_data, list):
+                        if (len(treino_data) > 0 and
+                                all(isinstance(item, dict) for item in treino_data) and
+                                all('Exercício' in item for item in treino_data)):
+                            # Converter lista para DataFrame
+                            df_treino = pd.DataFrame(treino_data)
+                            if not df_treino.empty:
+                                plano_limpo[nome_treino] = df_treino
+                                plano_valido = True
+
+        # Atribui o plano apenas se for válido
+        if plano_valido and plano_limpo:
+            st.session_state['plano_treino'] = plano_limpo
+        else:
+            st.session_state['plano_treino'] = None
+
+        st.session_state['frequencia'] = [d.date() if isinstance(d, datetime) else d for d in
+                                          data.get('frequencia', [])]
         st.session_state['historico_treinos'] = data.get('historico_treinos', [])
         st.session_state['fotos_progresso'] = data.get('fotos_progresso', [])
         st.session_state['medidas'] = data.get('medidas', [])
         st.session_state['feedbacks'] = data.get('feedbacks', [])
         st.session_state['metas'] = data.get('metas', [])
-        st.session_state['role'] = data.get('role', 'free') # <-- Carrega o role, default 'free' se não existir
-        st.session_state['settings'] = data.get('settings', st.session_state.get('settings', {}))
-        st.session_state['ciclo_atual'] = data.get('ciclo_atual') # Carrega ciclo atual também
-    except Exception as e:
-        st.error(f"Erro ao carregar: {e}")
+        st.session_state['role'] = data.get('role', 'free')
 
+        # Settings com merge seguro
+        settings_carregadas = data.get('settings', {})
+        settings_atuais = st.session_state.get('settings', {'theme': 'light', 'notify_on_login': True})
+        st.session_state['settings'] = {**settings_atuais, **settings_carregadas}
+
+        st.session_state['ciclo_atual'] = data.get('ciclo_atual')
+
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        # Em caso de erro, garante que o plano seja None
+        st.session_state['plano_treino'] = None
+
+
+def limpar_planos_antigos_firebase(uid: str):
+    """Limpa todos os planos antigos do Firebase, mantendo apenas o plano atual"""
+    if not uid or uid == 'demo-uid':
+        return
+
+    try:
+        # Carrega os dados atuais
+        doc_ref = db.collection('usuarios').document(uid)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            return
+
+        data = doc.to_dict()
+        plano_atual = st.session_state.get('plano_treino')
+
+        # CORREÇÃO: Verificar se o plano atual é válido
+        if not plano_atual or not isinstance(plano_atual, dict):
+            return
+
+        # Filtra apenas os treinos válidos do plano atual
+        plano_filtrado = {}
+        for nome_treino, treino_data in plano_atual.items():
+            if treino_data is not None:
+                if isinstance(treino_data, pd.DataFrame):
+                    if verificar_dataframe_valido(treino_data):
+                        plano_filtrado[nome_treino] = treino_data
+                elif isinstance(treino_data, list):
+                    if len(treino_data) > 0:
+                        plano_filtrado[nome_treino] = treino_data
+
+        # Prepara o payload com apenas o plano atual válido
+        plano_serial = plan_to_serial(plano_filtrado)
+
+        # Atualiza apenas o campo plano_treino
+        doc_ref.update({
+            'plano_treino': plano_serial,
+            'ultimo_save': datetime.now()
+        })
+
+        st.toast("✅ Planos antigos removidos, apenas o plano atual foi mantido!")
+
+    except Exception as e:
+        st.error(f"Erro ao limpar planos antigos: {e}")
+
+
+def salvar_dados_usuario_firebase(uid: str):
+    if not uid or uid == 'demo-uid':
+        return
+
+    try:
+        with st.spinner("💾 Salvando dados no Firestore..."):
+            doc = db.collection('usuarios').document(uid)
+
+            # CORREÇÃO: Validação antes de salvar
+            plano_para_salvar = st.session_state.get('plano_treino')
+            plano_serial_valido = None
+
+            if plano_para_salvar and isinstance(plano_para_salvar, dict):
+                plano_filtrado = {}
+                for nome_treino, treino_data in plano_para_salvar.items():
+                    if treino_data is not None:
+                        # Se for DataFrame
+                        if isinstance(treino_data, pd.DataFrame):
+                            if (not treino_data.empty and
+                                    'Exercício' in treino_data.columns and
+                                    len(treino_data) > 0):
+                                plano_filtrado[nome_treino] = treino_data
+
+                        # Se for lista
+                        elif isinstance(treino_data, list):
+                            if (len(treino_data) > 0 and
+                                    all(isinstance(item, dict) for item in treino_data) and
+                                    all('Exercício' in item for item in treino_data)):
+                                plano_filtrado[nome_treino] = treino_data
+
+                if plano_filtrado:
+                    plano_serial_valido = plan_to_serial(plano_filtrado)
+
+            # Prepara os outros dados
+            freq = []
+            for d in st.session_state.get('frequencia', []):
+                if isinstance(d, (date, datetime)):
+                    if isinstance(d, date) and not isinstance(d, datetime):
+                        freq.append(datetime.combine(d, datetime.min.time()))
+                    else:
+                        freq.append(d)
+                else:
+                    freq.append(d)
+
+            hist = []
+            for t in st.session_state.get('historico_treinos', []):
+                copy = dict(t)
+                if 'data' in copy and isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
+                    copy['data'] = datetime.combine(copy['data'], datetime.min.time())
+                hist.append(copy)
+
+            metas_save = []
+            for m in st.session_state.get('metas', []):
+                copy = dict(m)
+                if 'prazo' in copy and isinstance(copy['prazo'], date):
+                    copy['prazo'] = datetime.combine(copy['prazo'], datetime.min.time())
+                metas_save.append(copy)
+
+            fotos_save = []
+            for f in st.session_state.get('fotos_progresso', []):
+                copy = dict(f)
+                if 'data' in copy and isinstance(copy['data'], date):
+                    copy['data'] = copy['data'].isoformat()
+                fotos_save.append(copy)
+
+            payload = {
+                'dados_usuario': st.session_state.get('dados_usuario'),
+                'plano_treino': plano_serial_valido,  # APENAS o plano atual válido
+                'frequencia': freq,
+                'historico_treinos': hist,
+                'historico_peso': st.session_state.get('historico_peso', []),
+                'metas': metas_save,
+                'fotos_progresso': fotos_save,
+                'medidas': st.session_state.get('medidas', []),
+                'feedbacks': st.session_state.get('feedbacks', []),
+                'ciclo_atual': st.session_state.get('ciclo_atual'),
+                'role': st.session_state.get('role'),
+                'settings': st.session_state.get('settings', {}),
+                'ultimo_save': datetime.now()
+            }
+
+            # Usa set() em vez de update() para substituir completamente os dados
+            doc.set(payload, merge=True)
+            time.sleep(0.4)
+
+    except Exception as e:
+        st.error("Erro ao salvar no Firestore:")
+        st.error(str(e))
 
 # ---------------------------
 # Funções para a Rede Social
@@ -1939,27 +2342,38 @@ def verificar_credenciais_firebase(username_or_email: str, senha: str) -> (bool,
 # Periodization & Notifications
 # ---------------------------
 def verificar_periodizacao(num_treinos: int):
-    TREINOS = 20
-    ciclo = num_treinos // TREINOS
-    fase_idx = ciclo % 3
-    treinos_no_ciclo = num_treinos % TREINOS
+    TREINOS_POR_CICLO = 20
+
+    # ✅ LÓGICA CORRIGIDA: Cálculo mais intuitivo
+    ciclo = (num_treinos - 1) // TREINOS_POR_CICLO  # Ciclo atual (0-based)
+    fase_idx = ciclo % 3  # 0=Hipertrofia, 1=Força, 2=Resistência
+    treinos_no_ciclo_atual = (num_treinos - 1) % TREINOS_POR_CICLO + 1
+    treinos_restantes = TREINOS_POR_CICLO - treinos_no_ciclo_atual
+
     fases = [
         {'nome': 'Hipertrofia', 'series': '3-4', 'reps': '8-12', 'descanso': '60-90s', 'cor': '#FF6B6B'},
         {'nome': 'Força', 'series': '4-5', 'reps': '4-6', 'descanso': '120-180s', 'cor': '#4ECDC4'},
         {'nome': 'Resistência', 'series': '2-3', 'reps': '15-20', 'descanso': '30-45s', 'cor': '#95E1D3'},
     ]
-    return {'fase_atual': fases[fase_idx], 'treinos_restantes': TREINOS - treinos_no_ciclo,
-            'proxima_fase': fases[(fase_idx + 1) % 3], 'numero_ciclo': ciclo + 1}
 
+    return {
+        'fase_atual': fases[fase_idx],
+        'treinos_restantes': treinos_restantes,
+        'treinos_no_ciclo_atual': treinos_no_ciclo_atual,
+        'proxima_fase': fases[(fase_idx + 1) % 3],
+        'numero_ciclo': ciclo + 1  # Ciclo 1-based para exibição
+    }
 
 def check_notifications_on_open():
     notifs = []
     dados = st.session_state.get('dados_usuario') or {}
     dias_list = dados.get('dias_semana_list') or None
+
     if dias_list and st.session_state['settings'].get('notify_on_login', True):
         hoje = datetime.now().weekday()
         if hoje in dias_list:
             notifs.append({'tipo': 'lembrete_treino', 'msg': 'Hoje é dia de treino! Confira seu plano.'})
+
     for m in st.session_state.get('metas', []):
         prazo = m.get('prazo')
         try:
@@ -1969,18 +2383,45 @@ def check_notifications_on_open():
                 notifs.append({'tipo': 'meta', 'msg': f"Meta '{m.get('descricao')}' vence em {dias} dia(s)."})
         except:
             pass
+
+    # ✅ LÓGICA CORRIGIDA: Periodização a cada 20 treinos
     num_treinos = len(set(st.session_state.get('frequencia', [])))
-    info = verificar_periodizacao(num_treinos)
-    if info['treinos_restantes'] <= 0 and st.session_state.get('ciclo_atual') != info['numero_ciclo']:
-        notifs.append({'tipo': 'nova_fase',
-                       'msg': f"👏 Novo ciclo iniciado: {info['fase_atual']['nome']} (Ciclo {info['numero_ciclo']})"})
-        st.session_state['ciclo_atual'] = info['numero_ciclo']
-        if dados:
-            st.session_state['plano_treino'] = gerar_plano_personalizado(dados, info['fase_atual'])
-            notifs.append({'tipo': 'plano_ajustado', 'msg': 'Seu plano foi ajustado para a nova fase de treino!'})
+
+    # Só verifica periodização se tiver pelo menos 1 treino
+    if num_treinos > 0:
+        info = verificar_periodizacao(num_treinos)
+
+        # ✅ CORREÇÃO: Trocar de ciclo quando for múltiplo de 20
+        # Exemplo: 20, 40, 60, 80... treinos
+        if num_treinos % 20 == 0:
+            ciclo_anterior = st.session_state.get('ciclo_atual')
+            ciclo_novo = info['numero_ciclo']
+
+            if ciclo_anterior != ciclo_novo:
+                # NOVO CICLO DETECTADO!
+                notifs.append({'tipo': 'nova_fase',
+                               'msg': f"👏 Novo ciclo iniciado: {info['fase_atual']['nome']} (Ciclo {ciclo_novo})"})
+                st.session_state['ciclo_atual'] = ciclo_novo
+
+                # ✅ REGENERAR PLANO COM A NOVA FASE
+                if dados:
+                    try:
+                        novo_plano = gerar_plano_personalizado(dados, info['fase_atual'])
+                        if novo_plano:
+                            st.session_state['plano_treino'] = novo_plano
+                            # Salvar no Firebase
+                            uid = st.session_state.get('user_uid')
+                            if uid:
+                                salvar_dados_usuario_firebase(uid)
+                            notifs.append({'tipo': 'plano_ajustado',
+                                           'msg': f'Seu plano foi ajustado para a fase de {info["fase_atual"]["nome"]}!'})
+                    except Exception as e:
+                        st.error(f"Erro ao regenerar plano: {e}")
+
     for t in (5, 10, 30, 50, 100):
         if num_treinos == t:
             notifs.append({'tipo': 'conquista', 'msg': f"🎉 Você alcançou {t} treinos!"})
+
     st.session_state['notificacoes'] = notifs
 
 
@@ -2022,19 +2463,34 @@ def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
         st.session_state['confirm_excluir_foto'] = True
 
 
-def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None) -> Dict:
-    nivel = dados_usuario.get('nivel', 'Iniciante')  # Iniciante ou Intermediário/Avançado
+def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None,
+                              force_new: bool = False) -> Dict:
+    nivel = dados_usuario.get('nivel', 'Iniciante')
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
-    sexo = dados_usuario.get('sexo', 'Masculino')  # Usado apenas se precisarmos de desempate fino
+    sexo = dados_usuario.get('sexo', 'Masculino')
 
-    # Define séries/reps/descanso base (agora também considerando o nível para séries)
+    # ========== SEED MAIS CONSISTENTE ==========
+    if not force_new:
+        user_uid = st.session_state.get('user_uid', 'default')
+        # Adiciona mais informações para tornar o seed mais único
+        seed_string = f"{user_uid}_{nivel}_{dias}_{objetivo}_{sexo}_{'-'.join(sorted(restricoes_usr))}"
+        # Usa hash mais robusto
+        import hashlib
+        seed_value = int(hashlib.sha256(seed_string.encode()).hexdigest()[:8], 16) % (2**32)
+        random.seed(seed_value)
+        # st.write(f"DEBUG: Seed usado: {seed_value}")  # Descomente para debug
+    else:
+        random.seed()  # Seed aleatório para forçar novo plano
+    # ===========================================
+
+    # Define séries/reps/descanso base
     if fase_atual:
-        series_base_str = fase_atual['series']  # Ex: '3-4'
+        series_base_str = fase_atual['series']
         reps_base = fase_atual['reps']
         descanso_base = fase_atual['descanso']
-    else:  # Fallback se não houver fase (raro)
+    else:
         if objetivo == 'Hipertrofia':
             series_base_str, reps_base, descanso_base = ('3-4' if nivel != 'Iniciante' else '3'), '8-12', '60-90s'
         elif objetivo == 'Emagrecimento':
@@ -2042,21 +2498,19 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         else:
             series_base_str, reps_base, descanso_base = '3', '15-20', '30-45s'
 
-    # Determina o número de séries com base no nível e na fase/objetivo
+    # Determina o número de séries
     series_parts = series_base_str.split('-')
     series_final = series_parts[0] if nivel == 'Iniciante' else series_parts[-1]
-    # Garante que seja um número (caso a base seja só '3', por exemplo)
-    if not series_final.isdigit(): series_final = '3'  # Default seguro
+    if not series_final.isdigit(): series_final = '3'
 
-    # Função selecionar_exercicios (robusta, com filtros de nível, restrição e exclusão)
-    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[
-        Dict]:
+    # Função selecionar_exercicios
+    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[Dict]:
         exercicios_selecionados = []
         candidatos_validos = []
-        # Filtra exercícios por grupo, nível permitido e restrições
+
         for ex_nome, ex_data in EXERCICIOS_DB.items():
             niveis_permitidos = ex_data.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
-            if nivel not in niveis_permitidos: continue  # Filtra por nível aqui
+            if nivel not in niveis_permitidos: continue
 
             if ex_data.get('grupo') in grupos and ex_nome not in excluir:
                 exercicio_tem_restricao = any(r in ex_data.get('restricoes', []) for r in restricoes_usr)
@@ -2064,18 +2518,13 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
                     substituto = EXERCISE_SUBSTITUTIONS.get(ex_nome)
                     if substituto and substituto not in excluir:
                         sub_details = EXERCICIOS_DB.get(substituto, {})
-                        sub_niveis_permitidos = sub_details.get('niveis_permitidos',
-                                                                ['Iniciante', 'Intermediário/Avançado'])
-                        # Verifica nível E restrição do substituto
-                        if nivel in sub_niveis_permitidos and substituto not in candidatos_validos and not any(
-                                r in sub_details.get('restricoes', []) for r in restricoes_usr):
+                        sub_niveis_permitidos = sub_details.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
+                        if nivel in sub_niveis_permitidos and substituto not in candidatos_validos and not any(r in sub_details.get('restricoes', []) for r in restricoes_usr):
                             candidatos_validos.append(substituto)
-                # Adiciona original se permitido para o nível e seguro
                 elif nivel in niveis_permitidos and ex_nome not in candidatos_validos:
                     candidatos_validos.append(ex_nome)
 
-        # Seleciona compostos e isolados da lista de válidos
-        candidatos = list(set(candidatos_validos));
+        candidatos = list(set(candidatos_validos))
         random.shuffle(candidatos)
         compostos_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto']
         isolados_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto']
@@ -2087,12 +2536,11 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         if len(exercicios_finais) < total_desejado:
             faltantes = total_desejado - len(exercicios_finais)
             if len(isolados_finais) < n_isolados and len(compostos_selecionados) > len(compostos_finais):
-                extras_c = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes];
-                exercicios_finais.extend(extras_c);
+                extras_c = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes]
+                exercicios_finais.extend(extras_c)
                 faltantes -= len(extras_c)
-            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(
-                    isolados_finais):
-                extras_i = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes];
+            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(isolados_finais):
+                extras_i = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes]
                 exercicios_finais.extend(extras_i)
 
         exercicios_finais = exercicios_finais[:total_desejado]
@@ -2103,8 +2551,8 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
 
         return exercicios_selecionados if exercicios_finais else []
 
-    # --- LÓGICA DE GERAÇÃO BASEADA NO DOCUMENTO ---
-    plano = {}  # Começa vazio a cada chamada
+    # --- LÓGICA DE GERAÇÃO ---
+    plano = {}
     grupos_todos = ['Pernas', 'Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Core', 'Trapézio', 'Antebraço']
     grupos_superiores = ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Trapézio', 'Antebraço']
     grupos_inferiores = ['Pernas', 'Core']
@@ -2114,91 +2562,75 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
 
     if nivel == 'Iniciante':
         if dias == 1:
-            plano['Treino: Full Body'] = selecionar_exercicios(grupos_todos, 3, 3)  # Target: 6
+            plano['Treino: Full Body'] = selecionar_exercicios(grupos_todos, 3, 3)
         elif dias == 2:
-            plano['Treino A: Superiores'] = selecionar_exercicios(grupos_superiores, 2, 3)  # Target: 5
-            plano['Treino B: Inferiores'] = selecionar_exercicios(grupos_inferiores, 2, 2)  # Target: 4
+            plano['Treino A: Superiores'] = selecionar_exercicios(grupos_superiores, 2, 3)
+            plano['Treino B: Inferiores'] = selecionar_exercicios(grupos_inferiores, 2, 2)
         elif dias == 3:
-            fb1 = selecionar_exercicios(grupos_todos, 3, 2)  # Target: 5
+            fb1 = selecionar_exercicios(grupos_todos, 3, 2)
             fb2 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1])
             fb3 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1 + fb2])
             plano['Dia 1: Full Body A'] = fb1
             plano['Dia 2: Full Body B'] = fb2 if fb2 else fb1
             plano['Dia 3: Full Body C'] = fb3 if fb3 else fb2 if fb2 else fb1
         elif dias == 4:
-            plano['Treino A (Push+Core)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps', 'Core'], 3,
-                                                                  2)  # Target: 5
-            plano['Treino B (Pull+Legs)'] = selecionar_exercicios(['Costas', 'Bíceps', 'Pernas'], 3, 2)  # Target: 5
+            plano['Treino A (Push+Core)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps', 'Core'], 3, 2)
+            plano['Treino B (Pull+Legs)'] = selecionar_exercicios(['Costas', 'Bíceps', 'Pernas'], 3, 2)
         elif dias == 5:
-            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)  # Target: 5
-            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
-            upper_b = selecionar_exercicios(grupos_superiores, 3, 2,
-                                            excluir=[ex['Exercício'] for ex in upper_a])  # Target: 5
-            lower_b = selecionar_exercicios(grupos_inferiores, 3, 2,
-                                            excluir=[ex['Exercício'] for ex in lower_a])  # Target: 5
-            plano['Dia 1: Superiores A'] = upper_a;
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)
+            upper_b = selecionar_exercicios(grupos_superiores, 3, 2, excluir=[ex['Exercício'] for ex in upper_a])
+            lower_b = selecionar_exercicios(grupos_inferiores, 3, 2, excluir=[ex['Exercício'] for ex in lower_a])
+            plano['Dia 1: Superiores A'] = upper_a
             plano['Dia 2: Inferiores A'] = lower_a
-            plano['Dia 3: Superiores B'] = upper_b;
+            plano['Dia 3: Superiores B'] = upper_b
             plano['Dia 4: Inferiores B'] = lower_b
             plano['Dia 5: Superiores A'] = upper_a
         elif dias >= 6:
-            abc_a = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2)  # Target: 5
-            abc_b = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2)  # Target: 5
-            abc_c = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2)  # Target: 5
-            plano['Dia 1: Peito/Tríceps A'] = abc_a;
-            plano['Dia 2: Costas/Bíceps A'] = abc_b;
+            abc_a = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2)
+            abc_b = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2)
+            abc_c = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2)
+            plano['Dia 1: Peito/Tríceps A'] = abc_a
+            plano['Dia 2: Costas/Bíceps A'] = abc_b
             plano['Dia 3: Pernas/Ombros A'] = abc_c
-            plano['Dia 4: Peito/Tríceps B'] = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2,
-                                                                    excluir=[ex['Exercício'] for ex in abc_a]) or abc_a
-            plano['Dia 5: Costas/Bíceps B'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2,
-                                                                    excluir=[ex['Exercício'] for ex in abc_b]) or abc_b
-            plano['Dia 6: Pernas/Ombros B'] = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2,
-                                                                    excluir=[ex['Exercício'] for ex in abc_c]) or abc_c
+            plano['Dia 4: Peito/Tríceps B'] = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_a]) or abc_a
+            plano['Dia 5: Costas/Bíceps B'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_b]) or abc_b
+            plano['Dia 6: Pernas/Ombros B'] = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2, excluir=[ex['Exercício'] for ex in abc_c]) or abc_c
 
-    # --- ESTE 'ELIF' É CRUCIAL (EM VEZ DE 'IF') ---
     elif nivel == 'Intermediário/Avançado':
         if dias == 1:
-            plano['Treino: Full Body Intenso'] = selecionar_exercicios(grupos_todos, 4, 1)  # Target: 5
+            plano['Treino: Full Body Intenso'] = selecionar_exercicios(grupos_todos, 4, 1)
         elif dias == 2:
-            plano['Treino A: Full Body Foco Força'] = selecionar_exercicios(grupos_todos, 4, 1)  # Target: 5
-            plano['Treino B: Full Body Foco Volume'] = selecionar_exercicios(grupos_todos, 2, 3)  # Target: 5
+            plano['Treino A: Full Body Foco Força'] = selecionar_exercicios(grupos_todos, 4, 1)
+            plano['Treino B: Full Body Foco Volume'] = selecionar_exercicios(grupos_todos, 2, 3)
         elif dias == 3:
-            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)  # Target: 5
-            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)  # Target: 5
-            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs + ['Core'], 3, 2)  # Target: 5
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs + ['Core'], 3, 2)
         elif dias == 4:
-            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)  # Target: 5
-            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
-            plano['Dia 1: Upper Força'] = upper_a;
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)
+            plano['Dia 1: Upper Força'] = upper_a
             plano['Dia 2: Lower Força'] = lower_a
-            plano['Dia 3: Upper Volume'] = selecionar_exercicios(grupos_superiores, 2, 3,
-                                                                 excluir=[ex['Exercício'] for ex in
-                                                                          upper_a])  # Target: 5
-            plano['Dia 4: Lower Volume'] = selecionar_exercicios(grupos_inferiores, 2, 3,
-                                                                 excluir=[ex['Exercício'] for ex in
-                                                                          lower_a])  # Target: 5
+            plano['Dia 3: Upper Volume'] = selecionar_exercicios(grupos_superiores, 2, 3, excluir=[ex['Exercício'] for ex in upper_a])
+            plano['Dia 4: Lower Volume'] = selecionar_exercicios(grupos_inferiores, 2, 3, excluir=[ex['Exercício'] for ex in lower_a])
         elif dias == 5:
-            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)  # Target: 5
-            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)  # Target: 5
-            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs, 3, 2)  # Target: 5
-            plano['Dia 4: Upper Leve'] = selecionar_exercicios(grupos_superiores, 2, 3)  # Target: 5
-            plano['Dia 5: Lower/Core Leve'] = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs, 3, 2)
+            plano['Dia 4: Upper Leve'] = selecionar_exercicios(grupos_superiores, 2, 3)
+            plano['Dia 5: Lower/Core Leve'] = selecionar_exercicios(grupos_inferiores, 3, 2)
         elif dias >= 6:
-            a1 = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2)  # Target: 5
-            b1 = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2)  # Target: 5
-            c1 = selecionar_exercicios(['Pernas', 'Core'], 3, 2)  # Target: 5
-            plano['Dia 1: Peito/Ombro/Tríceps A'] = a1;
-            plano['Dia 2: Costas/Bíceps/Trapézio A'] = b1;
+            a1 = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2)
+            b1 = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2)
+            c1 = selecionar_exercicios(['Pernas', 'Core'], 3, 2)
+            plano['Dia 1: Peito/Ombro/Tríceps A'] = a1
+            plano['Dia 2: Costas/Bíceps/Trapézio A'] = b1
             plano['Dia 3: Pernas/Core A'] = c1
-            plano['Dia 4: Peito/Ombro/Tríceps B'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2,
-                                                                          excluir=[ex['Exercício'] for ex in a1]) or a1
-            plano['Dia 5: Costas/Bíceps/Trapézio B'] = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2,
-                                                                             excluir=[ex['Exercício'] for ex in
-                                                                                      b1]) or b1
-            plano['Dia 6: Pernas/Core B'] = selecionar_exercicios(['Pernas', 'Core'], 3, 2,
-                                                                  excluir=[ex['Exercício'] for ex in c1]) or c1
+            plano['Dia 4: Peito/Ombro/Tríceps B'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in a1]) or a1
+            plano['Dia 5: Costas/Bíceps/Trapézio B'] = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2, excluir=[ex['Exercício'] for ex in b1]) or b1
+            plano['Dia 6: Pernas/Core B'] = selecionar_exercicios(['Pernas', 'Core'], 3, 2, excluir=[ex['Exercício'] for ex in c1]) or c1
 
-    # Formatação final
     plano_final = {}
     for nome, exercicios_lista in plano.items():
         plano_final[nome] = exercicios_lista if exercicios_lista else []
@@ -2262,6 +2694,10 @@ def render_auth():
 
 # [MODIFICADO] Função render_main com a nova "Biblioteca VIP"
 def render_main():
+    # ========== VERIFICAÇÃO DO SETTINGS ==========
+    if 'settings' not in st.session_state:
+        st.session_state['settings'] = {'theme': 'light', 'notify_on_login': True}
+
     # Verifica os modos ativos em ordem: Warmup > Workout > Cooldown
     if st.session_state.get('warmup_in_progress', False):
         render_warmup_session()
@@ -2274,59 +2710,38 @@ def render_main():
         st.stop()
 
     # --- O código abaixo só é executado se nenhum modo estiver ativo ---
-
     check_notifications_on_open()
 
-    # --- Sidebar ---
-    st.sidebar.title("🏋️ FitPro")
-    st.sidebar.write(f"👤 {st.session_state.get('usuario_logado')}")
-    if st.sidebar.button("🚪 Sair"):
-        uid = st.session_state.get('user_uid')
-        if uid and uid != 'demo-uid':
-            salvar_dados_usuario_firebase(uid)
+    # ========== HEADER PRINCIPAL ==========
+    col_header1, col_header2, col_header3 = st.columns([3, 5, 2])
 
-        try:
-            del cookies['user_uid']
-        except Exception:
-            pass
+    with col_header1:
+        st.markdown("<h1 style='margin: 0;'>🏋️ FitPro</h1>", unsafe_allow_html=True)
+        st.caption(f"👤 {st.session_state.get('usuario_logado')}")
 
-            # --- CORREÇÃO DE SINTAXE AQUI ---
-        # Corrige o SyntaxError: invalid syntax (linha 1852)
-        keys_to_delete = [k for k in st.session_state.keys() if k != 'db']
-        for k in keys_to_delete:
-            del st.session_state[k]
-        # --- FIM DA CORREÇÃO ---
+        # Mostrar role apenas se for admin/vip
+        user_role = st.session_state.get('role', 'free')
+        if user_role in ['admin', 'vip']:
+            st.success(f"⭐ {user_role.upper()}", icon="⭐")
 
-        ensure_session_defaults()
-        st.rerun()
+    with col_header3:
+        st.write("")  # Espaçamento
+        if st.button("🚪 Sair", use_container_width=True):
+            uid = st.session_state.get('user_uid')
+            if uid and uid != 'demo-uid':
+                salvar_dados_usuario_firebase(uid)
+            try:
+                del cookies['user_uid']
+            except Exception:
+                pass
+            keys_to_delete = [k for k in st.session_state.keys() if k != 'db']
+            for k in keys_to_delete:
+                del st.session_state[k]
+            ensure_session_defaults()
+            st.rerun()
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Configurações")
-    theme = st.sidebar.selectbox("Tema", ["light", "dark"],
-                                 index=0 if st.session_state['settings'].get('theme', 'light') == 'light' else 1)
-    st.session_state['settings']['theme'] = theme
-    notify_on_open = st.sidebar.checkbox("Notificações ao abrir",
-                                         value=st.session_state['settings'].get('notify_on_login', True))
-    st.session_state['settings']['notify_on_login'] = notify_on_open
-    st.sidebar.checkbox("Modo offline (cache)", value=st.session_state.get('offline_mode', False), key='offline_mode')
-
-    if st.session_state.get('role') == 'admin':
-        st.sidebar.success("👑 Admin")
-
-    if st.session_state.get('notificacoes'):
-        for n in st.session_state.get('notificacoes', []):
-            if n.get('tipo') == 'conquista':
-                st.balloons()
-                st.success(n.get('msg', 'Notificação'))
-            else:
-                try:
-                    st.toast(n.get('msg', 'Notificação'))
-                except Exception:
-                    st.info(n.get('msg', 'Notificação'))
-        st.session_state['notificacoes'] = []
-
-    # --- Navegação Principal (Selectbox) ---
-    user_role = st.session_state.get('role', 'free')
+    # ========== MENU DE NAVEGAÇÃO ==========
+    st.markdown("---")
 
     # Define a lista base de páginas
     pages = [
@@ -2337,55 +2752,80 @@ def render_main():
     ]
 
     # Adiciona a Biblioteca VIP dinamicamente
+    user_role = st.session_state.get('role', 'free')
     if user_role in ['vip', 'admin']:
-        # Insere a biblioteca depois de "Meu Treino"
         pages.insert(5, "Biblioteca VIP")
 
     if user_role == 'admin':
-        pages.append("Admin")  # Adiciona Admin ao final
+        pages.append("Admin")
 
     if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in pages:
         st.session_state['selected_page'] = "Dashboard"
 
-    page = st.selectbox(
+    # Selectbox de navegação (igual ao seu código original)
+    page_key = f"nav_selectbox_{st.session_state.get('user_uid', 'default')}"
+
+    def on_nav_change():
+        selected = st.session_state.get(page_key)
+        if selected and selected in pages:
+            st.session_state.selected_page = selected
+            st.rerun()
+
+    selected_page = st.selectbox(
         "Navegação",
         pages,
         index=pages.index(st.session_state['selected_page']),
-        key='selected_page'
+        key=page_key,
+        on_change=on_nav_change
     )
 
-    # Mapeamento completo das páginas (incluindo as que foram "perdidas")
+    # ========== CONFIGURAÇÕES ==========
+    with st.expander("⚙️ Configurações", icon="⚙️"):
+        col_config1, col_config2 = st.columns(2)
+        with col_config1:
+            theme = st.selectbox("Tema", ["light", "dark"],
+                                 index=0 if st.session_state['settings'].get('theme', 'light') == 'light' else 1)
+            st.session_state['settings']['theme'] = theme
+        with col_config2:
+            notify_on_open = st.checkbox("Notificações ao abrir",
+                                         value=st.session_state['settings'].get('notify_on_login', True))
+            st.session_state['settings']['notify_on_login'] = notify_on_open
+
+    st.markdown("---")
+
+    # ========== RENDERIZAÇÃO DA PÁGINA SELECIONADA ==========
     page_map = {
         "Dashboard": render_dashboard,
         "Rede Social": render_rede_social,
         "Buscar Usuários": render_buscar_usuarios,
         "Questionário": render_questionario,
         "Meu Treino": render_meu_treino,
-        "Biblioteca VIP": render_vip_library,  # <-- Mapeamento VIP
+        "Biblioteca VIP": render_vip_library,
         "Registrar Treino": render_registrar_treino,
         "Progresso": render_progresso,
-        "Fotos": render_fotos,  # <-- Mapeamento corrigido
-        "Comparar Fotos": render_comparar_fotos,  # <-- Mapeamento corrigido
-        "Medidas": render_medidas,  # <-- Mapeamento corrigido
-        "Planejamento Semanal": render_planner,  # <-- Mapeamento corrigido
-        "Metas": render_metas,  # <-- Mapeamento corrigido
+        "Fotos": render_fotos,
+        "Comparar Fotos": render_comparar_fotos,
+        "Medidas": render_medidas,
+        "Planejamento Semanal": render_planner,
+        "Metas": render_metas,
         "Nutrição": render_nutricao_gated,
-        "Busca": render_busca,  # <-- Mapeamento corrigido
+        "Busca": render_busca,
         "Export/Backup": render_export_backup,
         "Solicitar VIP": render_solicitar_vip,
-        "Admin": render_admin_panel,  # <-- Mapeamento corrigido
+        "Admin": render_admin_panel,
     }
 
-    render_func = page_map.get(page, lambda: st.write("Página em desenvolvimento."))
+    render_func = page_map.get(st.session_state.selected_page, lambda: st.write("Página em desenvolvimento."))
 
     try:
         render_func()
-    except NameError as e:
-        # Este erro agora só aparecerá se uma função de renderização
-        # estiver *realmente* apagada do seu ficheiro.
-        st.error(f"Erro: A função para a página '{page}' não foi encontrada.")
-        st.error(f"Detalhe: {e}")
-        st.code(f"Verifique se a função 'def {e.name}()' existe no seu código.")
+    except Exception as e:
+        st.error(f"Erro ao renderizar a página '{st.session_state.selected_page}': {e}")
+        st.info("Tente recarregar a página ou voltar para o Dashboard.")
+        if st.button("Voltar para Dashboard"):
+            st.session_state.selected_page = "Dashboard"
+            st.rerun()
+
 def render_admin_panel():
     st.title("👑 Painel Admin")
     st.warning("Use com cuidado — ações afetam usuários reais.")
@@ -2512,7 +2952,6 @@ def render_admin_panel():
 def render_premade_workout_viewer():
     """Exibe o plano de treino pré-feito selecionado."""
     workout_id = st.session_state.get('selected_premade_workout')
-    # Se, por algum motivo, o ID não for encontrado, volte
     if not workout_id or workout_id not in PREMADE_WORKOUTS_DB:
         st.error("Erro ao carregar o treino. Voltando à biblioteca.")
         st.session_state.pop('selected_premade_workout', None)
@@ -2534,7 +2973,8 @@ def render_premade_workout_viewer():
     # Reutiliza a lógica de exibição de 'render_meu_treino'
     plano = workout['plano']
     for nome_treino, exercicios_lista in plano.items():
-        if not exercicios_lista: continue
+        if not exercicios_lista:
+            continue
 
         st.subheader(nome_treino)
         df_treino = pd.DataFrame(exercicios_lista)
@@ -2546,7 +2986,7 @@ def render_premade_workout_viewer():
             descanso = row.get('Descanso', 'N/A')
 
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col_media, col_instr = st.columns([1, 2])  # Proporção [1, 2]
+                col_media, col_instr = st.columns([1, 2])
 
                 with col_media:
                     video_url = find_exercise_video_youtube(exercicio)
@@ -2557,7 +2997,7 @@ def render_premade_workout_viewer():
                         st.info("Vídeo de execução indisponível.")
 
                 with col_instr:
-                    st.markdown("##### 📋 **Instruções**")
+                    st.markdown("##### 📋 Instruções")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
 
@@ -2565,6 +3005,7 @@ def render_premade_workout_viewer():
                     if ex_data:
                         st.markdown("---")
                         st.write(f"**Grupo Muscular:** {ex_data.get('grupo', 'N/A')}")
+                        st.write(f"**Tipo:** {ex_data.get('tipo', 'N/A')}")
                         st.write(f"**Equipamento:** {ex_data.get('equipamento', 'N/A')}")
                         if ex_data.get('descricao'):
                             st.markdown("---")
@@ -2580,29 +3021,24 @@ def render_workout_card_grid():
         "Explore programas de treino completos, criados por especialistas. Clique em 'Ver Plano de Treino' para ver os detalhes.")
     st.markdown("---")
 
-    # Define o número de colunas para os cards
     num_cols = 3
-    # Lê dinamicamente CADA item do seu banco de dados de treinos
     workout_items = list(PREMADE_WORKOUTS_DB.items())
 
-    # Faz um loop por todos os treinos que encontrar
     for i in range(0, len(workout_items), num_cols):
         cols = st.columns(num_cols)
-        batch = workout_items[i:i + num_cols]  # Pega 3 treinos por vez
+        batch = workout_items[i:i + num_cols]
 
         for j, (workout_id, workout) in enumerate(batch):
             with cols[j]:
                 with st.container(border=True):
                     try:
-                        # Usa 'use_container_width' (corrigido do aviso)
                         st.image(workout["image_url"], use_container_width=True)
                     except Exception:
-                        st.error("Imagem não pôde ser carregada.")  # Fallback
+                        st.error("Imagem não pôde ser carregada.")
 
                     st.subheader(workout["title"])
                     st.caption(workout["description"])
 
-                    # Botão que define o ID do treino selecionado
                     if st.button("Ver Plano de Treino", key=workout_id, use_container_width=True, type="primary"):
                         st.session_state['selected_premade_workout'] = workout_id
                         st.rerun()
@@ -2612,6 +3048,16 @@ def render_vip_library():
     """Função principal da página 'Biblioteca VIP', decide o que mostrar."""
     st.title("📚 Biblioteca de Treinos VIP")
 
+    # Verifica se o usuário tem acesso
+    user_role = st.session_state.get('role', 'free')
+    if user_role not in ['vip', 'admin']:
+        st.error("🔒 Acesso restrito a usuários VIP")
+        st.info("Faça upgrade para VIP para acessar esta biblioteca exclusiva!")
+        if st.button("⭐ Tornar-se VIP"):
+            st.session_state.selected_page = "Solicitar VIP"
+            st.rerun()
+        return
+
     # Verifica se um treino foi selecionado
     if st.session_state.get('selected_premade_workout'):
         # Se sim, mostra a visualização detalhada do treino
@@ -2619,7 +3065,6 @@ def render_vip_library():
     else:
         # Se não, mostra a grade de cards para seleção
         render_workout_card_grid()
-
 
 def render_nutricao_gated():
     user_role = st.session_state.get('role', 'free')
@@ -3146,244 +3591,688 @@ def render_buscar_usuarios():
 
 
 def render_dashboard():
-    st.title("📊 Dashboard")
-    show_logo_center() # Mantém o logo e título
-    st.markdown("---")
+    # ========== VERIFICAÇÃO INICIAL ==========
+    if not st.session_state.get('usuario_logado'):
+        st.error("Usuário não logado.")
+        return
 
-    col1, col2 = st.columns(2)
-    user_role = st.session_state.get('role', 'free') # Pega o role do usuário
+    # ========== CONFIGURAÇÃO DO TEMA ==========
+    theme = st.session_state['settings'].get('theme', 'light')
+    if theme == 'dark':
+        st.markdown("""
+        <style>
+        .main { background-color: #0E1117; }
+        </style>
+        """, unsafe_allow_html=True)
+
+    # ========== HEADER DO DASHBOARD ==========
+    st.title(f"🏠 Dashboard - {st.session_state.get('usuario_logado', 'Usuário')}")
+
+    # Mostrar role se for VIP/Admin
+    user_role = st.session_state.get('role', 'free')
+    if user_role in ['vip', 'admin']:
+        st.success(f"⭐ Status: {user_role.upper()}")
+
+    # ========== FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO ==========
+    def navigate_to_page(page_name):
+        st.session_state.selected_page = page_name
+        st.rerun()
+
+    # ========== SEÇÃO DE BEM-ESTAR DO DIA ==========
+    st.markdown("---")
+    st.subheader("📊 Resumo do Seu Dia")
+
+    # Verificar treino do dia
+    treino_hoje = verificar_treino_do_dia()
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.subheader("🚀 Seu Progresso")
-        num_treinos = len(set(st.session_state.get('frequencia', [])))
-        st.metric("Total de Treinos Completos", num_treinos)
-
-        streak_semanal = 0
-        frequencia_completa = st.session_state.get('frequencia', [])
-        if frequencia_completa:
-            try:
-                datas_treino = sorted([d for d in frequencia_completa if isinstance(d, date)])
-                if datas_treino:
-                    hoje = date.today(); semana_atual = hoje.isocalendar()[1]; ano_atual = hoje.year
-                    semanas_treinadas = sorted(list(set(d.isocalendar()[0:2] for d in datas_treino)), reverse=True)
-                    semana_esperada = semana_atual; ano_esperado = ano_atual
-                    for ano_semana, num_semana in semanas_treinadas:
-                        if ano_semana == ano_esperado and num_semana == semana_esperada:
-                            streak_semanal += 1
-                            dia_anterior = hoje - timedelta(weeks=streak_semanal)
-                            semana_esperada = dia_anterior.isocalendar()[1]; ano_esperado = dia_anterior.year
-                        else:
-                            if streak_semanal == 0 and ano_semana == ano_atual and num_semana == semana_atual: streak_semanal = 1
-                            break
-            except Exception: streak_semanal = 0
-        st.metric("🔥 Sequência Semanal", f"{streak_semanal} Semanas")
-
-        conquistas = [n['msg'] for n in st.session_state.get('notificacoes', []) if n.get('tipo') == 'conquista']
-        if conquistas: st.success(f"🏆 Última Conquista: {conquistas[-1]}")
-
+        if treino_hoje:
+            if treino_hoje == "Descanso":
+                st.info("🎉 **Dia de Descanso**")
+                st.caption("Aproveite para se recuperar!")
+            else:
+                st.success(f"🏋️ **Treino de Hoje**")
+                st.write(f"**{treino_hoje}**")
+                if st.button("💪 Iniciar Treino", key="iniciar_treino_dash", use_container_width=True):
+                    navigate_to_page("Meu Treino")
+        else:
+            st.warning("📅 **Sem Planejamento**")
+            st.caption("Configure seu planejamento semanal")
+            if st.button("⚙️ Configurar", key="config_planejamento", use_container_width=True):
+                navigate_to_page("Planejamento Semanal")
 
     with col2:
-        st.subheader("🎯 Foco Atual")
-        if num_treinos > 0:
-            info = verificar_periodizacao(num_treinos); fase = info['fase_atual']; cor_fase = fase.get('cor', '#4ECDC4')
-            st.markdown(f"""
-                <div style='padding: 15px; border-radius: 10px; background-color: {cor_fase}; color: #FFFFFF; border-left: 5px solid #FFFFFF;'>
-                <h4 style='margin:0; color: #FFFFFF;'>Fase: {fase['nome']} (Ciclo {info['numero_ciclo']})</h4>
-                <small>{fase['reps']} reps · {fase['series']} séries · Descanso {fase['descanso']}</small><br>
-                <small>Treinos restantes na fase: {info['treinos_restantes']}</small>
-                </div> <br> """, unsafe_allow_html=True)
-        else: st.info("Complete seu primeiro treino para iniciar a periodização!")
+        # Estatística de treinos na semana
+        hoje = datetime.now().date()
+        inicio_semana = hoje - timedelta(days=hoje.weekday())
+        treinos_esta_semana = [
+            d for d in st.session_state.get('frequencia', [])
+            if isinstance(d, date) and d >= inicio_semana
+        ]
+        st.metric("Treinos Esta Semana", f"{len(treinos_esta_semana)}/7")
 
-        quotes = ["...", "...", "..."] # Sua lista de frases
-        st.markdown(f"> *“{random.choice(quotes)}”*", help="Frase do dia")
+    with col3:
+        # Próxima meta
+        metas = st.session_state.get('metas', [])
+        metas_ativas = [m for m in metas if m.get('status') != 'concluída']
+        if metas_ativas:
+            prox_meta = metas_ativas[0]
+            st.metric("Próxima Meta", prox_meta.get('descricao', 'Meta'))
+        else:
+            st.metric("Metas", "Nenhuma ativa")
 
+    # ========== NOTIFICAÇÕES ==========
+    notificacoes = st.session_state.get('notificacoes', [])
+    if notificacoes:
+        st.markdown("---")
+        st.subheader("🔔 Notificações")
+
+        for notif in notificacoes[:3]:  # Mostra apenas as 3 mais recentes
+            tipo = notif.get('tipo', 'info')
+            msg = notif.get('msg', '')
+
+            if tipo == 'lembrete_treino':
+                st.success(f"🎯 {msg}")
+            elif tipo == 'meta':
+                st.warning(f"⏰ {msg}")
+            elif tipo == 'nova_fase':
+                st.info(f"🔄 {msg}")
+            elif tipo == 'conquista':
+                st.balloons()
+                st.success(f"🎉 {msg}")
+            else:
+                st.info(f"ℹ️ {msg}")
+
+        if len(notificacoes) > 3:
+            with st.expander(f"Ver todas as {len(notificacoes)} notificações"):
+                for notif in notificacoes[3:]:
+                    st.write(f"• {notif.get('msg', '')}")
+
+    # ========== ESTATÍSTICAS DE PROGRESSO ==========
     st.markdown("---")
-    st.subheader("📅 Calendário de Treinos")
+    st.subheader("📈 Estatísticas de Progresso")
 
-    # [GATING APLICADO AQUI]
-    limite_dias_calendario = None # VIP vê tudo
-    if user_role == 'free':
-        limite_dias_calendario = 30 # Free vê últimos 30 dias
-        st.caption(f"ℹ️ Usuários VIP têm acesso ao histórico completo. Exibindo últimos {limite_dias_calendario} dias.")
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
 
-    frequencia_para_calendario = []
-    if frequencia_completa:
-        hoje_cal = date.today()
-        if limite_dias_calendario:
-            data_limite_cal = hoje_cal - timedelta(days=limite_dias_calendario)
-            frequencia_para_calendario = [d for d in frequencia_completa if isinstance(d, date) and d >= data_limite_cal]
-        else: # VIP
-            frequencia_para_calendario = [d for d in frequencia_completa if isinstance(d, date)]
+    with col_stat1:
+        total_treinos = len(st.session_state.get('frequencia', []))
+        st.metric("Total de Treinos", total_treinos)
 
-    if frequencia_para_calendario:
-        dias_display = 30 # Sempre mostrar 30 dias no visual
-        ultimos_dias_cal = [hoje_cal - timedelta(days=i) for i in range(dias_display)]
-        treinos_periodo_cal = set(frequencia_para_calendario)
-        df_cal = pd.DataFrame({'data_obj': ultimos_dias_cal})
-        df_cal['data'] = df_cal['data_obj'].apply(lambda d: d.strftime('%Y-%m-%d'))
-        df_cal['treinou'] = df_cal['data_obj'].apply(lambda d: 1 if d in treinos_periodo_cal else 0)
-        df_cal['dia_semana_num'] = df_cal['data_obj'].apply(lambda d: d.weekday())
-        df_cal['dia_semana_nome'] = df_cal['data_obj'].apply(lambda d: d.strftime('%a'))
-        df_cal['semana_ano'] = df_cal['data_obj'].apply(lambda d: d.isocalendar()[1])
-        dias_ordem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]
-        try:
-            heatmap_data = df_cal.pivot_table(index='semana_ano', columns='dia_semana_num', values='treinou', aggfunc='max').fillna(0)
-            heatmap_data = heatmap_data.reindex(columns=range(7), fill_value=0); heatmap_data.columns = dias_ordem
-            fig_cal = px.imshow(heatmap_data, labels=dict(x="Dia", y="Semana", color="Treinou"), x=dias_ordem, text_auto=False, aspect="auto", color_continuous_scale=px.colors.sequential.Greens)
-            fig_cal.update_xaxes(side="top"); fig_cal.update_layout(title="Visão Semanal (Verde = Treinou)")
-            st.plotly_chart(fig_cal, use_container_width=True)
-        except Exception as e:
-             st.warning(f"Não foi possível gerar o calendário visual: {e}")
-             st.dataframe(df_cal[['data', 'dia_semana_nome', 'treinou']].sort_values(by='data').head(30))
+    with col_stat2:
+        streak_atual = calcular_streak(st.session_state.get('frequencia', []))
+        st.metric("Sequência Atual", f"{streak_atual} dias")
+
+    with col_stat3:
+        peso_atual = None
+        historico_peso = st.session_state.get('historico_peso', [])
+        if historico_peso:
+            # Pega o último registro de peso
+            ultimo_registro = historico_peso[-1]
+            if isinstance(ultimo_registro, dict):
+                peso_atual = ultimo_registro.get('peso')
+            else:
+                peso_atual = ultimo_registro
+        st.metric("Peso Atual", f"{peso_atual} kg" if peso_atual else "N/A")
+
+    with col_stat4:
+        # Info de periodização
+        num_treinos = len(set(st.session_state.get('frequencia', [])))
+        if num_treinos > 0:
+            info_periodizacao = verificar_periodizacao(num_treinos)
+            st.metric("Fase Atual", info_periodizacao['fase_atual']['nome'])
+        else:
+            st.metric("Fase Atual", "Inicial")
+
+    # ========== GRÁFICO DE FREQUÊNCIA ==========
+    st.markdown("---")
+    st.subheader("📊 Frequência de Treinos")
+
+    frequencia = st.session_state.get('frequencia', [])
+    if frequencia:
+        # Converter para datas se necessário
+        datas_treino = []
+        for data in frequencia:
+            if isinstance(data, datetime):
+                datas_treino.append(data.date())
+            elif isinstance(data, date):
+                datas_treino.append(data)
+            elif isinstance(data, str):
+                try:
+                    datas_treino.append(date.fromisoformat(data))
+                except:
+                    pass
+
+        if datas_treino:
+            # Criar DataFrame para o gráfico
+            df_freq = pd.DataFrame({'data': datas_treino})
+            df_freq['data'] = pd.to_datetime(df_freq['data'])
+            df_freq['count'] = 1
+
+            # Agrupar por mês
+            df_mensal = df_freq.set_index('data').resample('M').count()
+
+            fig = px.bar(
+                df_mensal,
+                x=df_mensal.index,
+                y='count',
+                title="Treinos por Mês",
+                labels={'count': 'Treinos', 'data': 'Mês'}
+            )
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Registre treinos para ver o calendário.")
+        st.info("📝 Ainda não há registros de treinos. Comece registrando seu primeiro treino!")
+        if st.button("🎯 Registrar Primeiro Treino", key="primeiro_treino"):
+            navigate_to_page("Registrar Treino")
+
+    # ========== PLANO DE TREINO ATUAL ==========
+    st.markdown("---")
+    st.subheader("🏋️ Seu Plano de Treino")
+
+    plano_treino = st.session_state.get('plano_treino')
+    if plano_treino and verificar_plano_valido(plano_treino):
+        st.success("✅ Plano de treino ativo")
+
+        # Mostrar dias do plano
+        dias_plano = list(plano_treino.keys())
+        st.write(f"**Dias configurados:** {len(dias_plano)}")
+
+        for i, dia_treino in enumerate(dias_plano[:3]):  # Mostra apenas os 3 primeiros
+            exercicios = plano_treino[dia_treino]
+            num_exercicios = len(exercicios) if isinstance(exercicios, (list, pd.DataFrame)) else 0
+            st.write(f"• **{dia_treino}**: {num_exercicios} exercícios")
+
+        if len(dias_plano) > 3:
+            with st.expander(f"Ver todos os {len(dias_plano)} dias"):
+                for dia_treino in dias_plano:
+                    exercicios = plano_treino[dia_treino]
+                    num_exercicios = len(exercicios) if isinstance(exercicios, (list, pd.DataFrame)) else 0
+                    st.write(f"• **{dia_treino}**: {num_exercicios} exercícios")
+
+        col_plano1, col_plano2 = st.columns(2)
+        with col_plano1:
+            if st.button("👀 Ver Plano Completo", key="ver_plano_dash", use_container_width=True):
+                navigate_to_page("Meu Treino")
+
+        with col_plano2:
+            if st.button("🔄 Gerar Novo Plano", key="gerar_plano_dash", use_container_width=True):
+                navigate_to_page("Questionário")
+
+    else:
+        st.warning("📝 Você ainda não tem um plano de treino gerado!")
+        st.info("Complete o questionário para gerar seu plano personalizado.")
+        if st.button("📋 Responder Questionário", key="questionario_dash", use_container_width=True, type="primary"):
+            navigate_to_page("Questionário")
+
+    # ========== METAS EM DESTAQUE ==========
+    st.markdown("---")
+    st.subheader("🎯 Metas em Andamento")
+
+    metas = st.session_state.get('metas', [])
+    metas_ativas = [m for m in metas if m.get('status') != 'concluída']
+
+    if metas_ativas:
+        for meta in metas_ativas[:2]:  # Mostra apenas 2 metas
+            descricao = meta.get('descricao', 'Meta sem descrição')
+            prazo = meta.get('prazo')
+            tipo = meta.get('tipo', 'geral')
+
+            col_meta1, col_meta2 = st.columns([3, 1])
+            with col_meta1:
+                st.write(f"**{descricao}**")
+                if prazo:
+                    try:
+                        prazo_dt = date.fromisoformat(prazo) if isinstance(prazo, str) else prazo
+                        dias_restantes = (prazo_dt - datetime.now().date()).days
+                        if dias_restantes >= 0:
+                            st.caption(f"⏳ {dias_restantes} dias restantes")
+                        else:
+                            st.caption("⚠️ Prazo expirado")
+                    except:
+                        st.caption("📅 Prazo não definido")
+
+            with col_meta2:
+                if st.button("📊", key=f"ver_meta_{hash(descricao)}"):
+                    navigate_to_page("Metas")
+
+        if len(metas_ativas) > 2:
+            st.caption(f"E mais {len(metas_ativas) - 2} metas...")
+
+        if st.button("👀 Ver Todas as Metas", key="ver_metas_dash", use_container_width=True):
+            navigate_to_page("Metas")
+    else:
+        st.info("🎯 Você não tem metas ativas no momento.")
+        if st.button("➕ Criar Primeira Meta", key="criar_meta_dash", use_container_width=True):
+            navigate_to_page("Metas")
+
+    # ========== AÇÕES RÁPIDAS ==========
+    st.markdown("---")
+    st.subheader("⚡ Ações Rápidas")
+
+    col_rap1, col_rap2, col_rap3, col_rap4 = st.columns(4)
+
+    with col_rap1:
+        if st.button("📝 Registrar Treino", key="reg_treino_rapido", use_container_width=True):
+            navigate_to_page("Registrar Treino")
+
+    with col_rap2:
+        if st.button("📸 Nova Foto", key="foto_rapido", use_container_width=True):
+            navigate_to_page("Fotos")
+
+    with col_rap3:
+        if st.button("📊 Medidas", key="medidas_rapido", use_container_width=True):
+            navigate_to_page("Medidas")
+
+    with col_rap4:
+        if st.button("👥 Rede Social", key="social_rapido", use_container_width=True):
+            navigate_to_page("Rede Social")
+
+    # ========== RECOMENDAÇÕES ==========
+    st.markdown("---")
+    st.subheader("💡 Recomendações")
+
+    # Análise inteligente baseada nos dados do usuário
+    total_treinos = len(st.session_state.get('frequencia', []))
+    plano_valido = verificar_plano_valido(st.session_state.get('plano_treino'))
+    tem_fotos = len(st.session_state.get('fotos_progresso', [])) > 0
+    tem_medidas = len(st.session_state.get('medidas', [])) > 0
+
+    recomendacoes = []
+
+    if total_treinos == 0:
+        recomendacoes.append("🎯 **Registre seu primeiro treino** para começar a acompanhar seu progresso!")
+
+    if not plano_valido:
+        recomendacoes.append("📋 **Complete o questionário** para gerar seu plano de treino personalizado.")
+
+    if not tem_fotos:
+        recomendacoes.append("📸 **Tire sua primeira foto de progresso** para visualizar suas mudanças.")
+
+    if not tem_medidas:
+        recomendacoes.append("📏 **Registre suas medidas** para acompanhar mudanças específicas.")
+
+    if total_treinos > 0 and total_treinos % 10 == 0:
+        recomendacoes.append(
+            f"🎉 **Parabéns pelos {total_treinos} treinos!** Considere tirar novas fotos para comparar o progresso.")
+
+    # Verificar se está há mais de 5 dias sem treinar
+    if total_treinos > 0:
+        datas_treino = []
+        for data in st.session_state.get('frequencia', []):
+            if isinstance(data, datetime):
+                datas_treino.append(data.date())
+            elif isinstance(data, date):
+                datas_treino.append(data)
+            elif isinstance(data, str):
+                try:
+                    datas_treino.append(date.fromisoformat(data))
+                except:
+                    pass
+
+        if datas_treino:
+            ultimo_treino = max(datas_treino)
+            dias_sem_treinar = (datetime.now().date() - ultimo_treino).days
+
+            if dias_sem_treinar > 5:
+                recomendacoes.append(f"⏰ **Você está {dias_sem_treinar} dias sem treinar!** Que tal retomar hoje?")
+
+    if recomendacoes:
+        for rec in recomendacoes[:3]:  # Mostra apenas 3 recomendações
+            st.info(rec)
+    else:
+        st.success("🌟 Você está no caminho certo! Continue com a consistência.")
+
+# Função auxiliar para calcular streak (adicione esta função também)
+def calcular_streak(frequencia):
+    """Calcula a sequência atual de dias consecutivos de treino"""
+    if not frequencia:
+        return 0
+
+    # Converter para datas
+    datas_treino = []
+    for data in frequencia:
+        if isinstance(data, datetime):
+            datas_treino.append(data.date())
+        elif isinstance(data, date):
+            datas_treino.append(data)
+        elif isinstance(data, str):
+            try:
+                datas_treino.append(date.fromisoformat(data))
+            except:
+                pass
+
+    if not datas_treino:
+        return 0
+
+    datas_treino = sorted(set(datas_treino))  # Remove duplicatas e ordena
+    hoje = datetime.now().date()
+
+    # Verifica se treinou hoje
+    streak = 0
+    if hoje in datas_treino or (hoje - timedelta(days=1)) in datas_treino:
+        # Calcula streak retroativamente
+        current_date = hoje
+        while current_date in datas_treino:
+            streak += 1
+            current_date -= timedelta(days=1)
+
+    return streak
+
+
+# Função auxiliar para verificar treino do dia (adicione esta também)
+def verificar_treino_do_dia():
+    """Verifica qual é o treino programado para hoje"""
+    planejamento = st.session_state.get('dados_usuario', {}).get('planejamento_semanal', {})
+    if not planejamento:
+        return None
+
+    DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    dia_atual = datetime.now().weekday()
+    nome_dia_atual = DIAS_SEMANA[dia_atual]
+
+    return planejamento.get(nome_dia_atual, "Descanso")
 
 
 def render_questionario():
-    st.title("🏋️ Perfil do Atleta")
-    st.markdown("Responda ao formulário para gerarmos um plano de treino **exclusivo para você**.")
-    dados = st.session_state.get('dados_usuario') or {}
-    with st.form("form_q"):
+    st.title("📝 Questionário de Perfil")
+    st.markdown("---")
+
+    # Verifica se há uma ação de navegação pendente
+    if 'navigate_to' in st.session_state:
+        target_page = st.session_state.navigate_to
+        st.session_state.selected_page = target_page
+        del st.session_state.navigate_to
+        st.rerun()
+
+    with st.form("form_questionario", clear_on_submit=False):
+        st.subheader("Informações Pessoais")
+
         col1, col2 = st.columns(2)
         with col1:
-            nome = st.text_input("Nome completo", value=dados.get('nome', ''))
-            idade = st.number_input("Idade", 12, 100, value=dados.get('idade', 25))
-            peso = st.number_input("Peso (kg)", 30.0, 200.0, value=dados.get('peso', 70.0), step=0.1)
-            altura = st.number_input("Altura (cm)", 100.0, 250.0, value=dados.get('altura', 170.0), step=0.1)
-            # [NOVO] Campo Sexo
-            sexo = st.selectbox("Sexo", ["Masculino", "Feminino"], index=0 if dados.get('sexo', 'Masculino') == 'Masculino' else 1)
+            nome = st.text_input("Nome completo*", value=st.session_state.get('dados_usuario', {}).get('nome', ''))
+            peso = st.number_input("Peso (kg)*", min_value=30.0, max_value=200.0,
+                                   value=st.session_state.get('dados_usuario', {}).get('peso', 70.0), step=0.1)
+            altura = st.number_input("Altura (cm)*", min_value=100.0, max_value=220.0,
+                                     value=st.session_state.get('dados_usuario', {}).get('altura', 170.0), step=0.1)
 
         with col2:
-            nivel = st.selectbox("Qual seu nível de experiência?", ["Iniciante", "Intermediário/Avançado"],
-                                 index=0 if dados.get('nivel') == 'Iniciante' else 1)
-            objetivo = st.selectbox("Qual seu objetivo principal?", ["Hipertrofia", "Emagrecimento", "Condicionamento"],
-                                      index=["Hipertrofia", "Emagrecimento", "Condicionamento"].index(
-                                          dados.get('objetivo', 'Hipertrofia')))
-            dias = st.slider("Quantos dias por semana pode treinar?", 2, 6, value=dados.get('dias_semana', 3))
+            idade = st.number_input("Idade*", min_value=12, max_value=100,
+                                    value=st.session_state.get('dados_usuario', {}).get('idade', 25))
+            sexo = st.selectbox("Sexo*", ["Masculino", "Feminino"],
+                                index=0 if st.session_state.get('dados_usuario', {}).get('sexo',
+                                                                                         'Masculino') == 'Masculino' else 1)
 
-        restricoes = st.multiselect("Possui alguma dor ou restrição nas seguintes áreas?",
-                                    ["Lombar", "Joelhos", "Ombros", "Cotovelos", "Punhos"],
-                                    default=dados.get('restricoes', []))
+        st.markdown("---")
+        st.subheader("Experiência e Objetivos")
 
-        if st.form_submit_button("Salvar Perfil e Gerar Treino"):
-            # [MODIFICADO] Adiciona 'sexo' aos novos dados
-            novos_dados = {'nome': nome, 'idade': idade, 'peso': peso, 'altura': altura, 'sexo': sexo, # <- Adicionado
-                           'nivel': nivel, 'objetivo': objetivo, 'dias_semana': dias, 'restricoes': restricoes,
-                           'data_cadastro': iso_now()}
-            st.session_state['dados_usuario'] = novos_dados
-            hp = st.session_state.get('historico_peso', [])
-            if not hp or hp[-1].get('peso') != peso:
-                hp.append({'data': iso_now(), 'peso': peso})
-                st.session_state['historico_peso'] = hp
-            with st.spinner("🤖 Criando seu plano de treino personalizado..."):
-                st.session_state['plano_treino'] = gerar_plano_personalizado(novos_dados)
-                time.sleep(1)
-            uid = st.session_state.get('user_uid')
-            if uid:
-                salvar_dados_usuario_firebase(uid)
-            st.success("Perfil salvo e plano de treino personalizado gerado com sucesso!")
-            st.info("Acesse a página 'Meu Treino' para visualizar.")
+        col3, col4 = st.columns(2)
+        with col3:
+            nivel = st.selectbox("Nível de experiência*",
+                                 ["Iniciante", "Intermediário/Avançado"],
+                                 index=0 if st.session_state.get('dados_usuario', {}).get('nivel',
+                                                                                          'Iniciante') == 'Iniciante' else 1)
+
+            dias_semana = st.slider("Dias de treino por semana*", 1, 7,
+                                    value=st.session_state.get('dados_usuario', {}).get('dias_semana', 3))
+
+        with col4:
+            objetivo = st.selectbox("Objetivo principal*",
+                                    ["Hipertrofia", "Emagrecimento", "Condicionamento", "Força"],
+                                    index=0 if st.session_state.get('dados_usuario', {}).get('objetivo',
+                                                                                             'Hipertrofia') == 'Hipertrofia' else 1)
+
+            foco_muscular = st.multiselect("Foco muscular desejado (opcional)",
+                                           ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Abdômen", "Glúteos"],
+                                           default=st.session_state.get('dados_usuario', {}).get('foco', []))
+
+        st.markdown("---")
+        st.subheader("Restrições e Equipamentos")
+
+        col5, col6 = st.columns(2)
+        with col5:
+            restricoes = st.multiselect("Restrições físicas (se houver)",
+                                        ["Lombar", "Joelhos", "Ombros", "Cotovelos", "Punhos", "Tornozelos"],
+                                        default=st.session_state.get('dados_usuario', {}).get('restricoes', []))
+
+        with col6:
+            equipamentos = st.multiselect("Equipamentos disponíveis",
+                                          ["Barra", "Halteres", "Máquinas", "Peso Corporal", "Elásticos", "Polia",
+                                           "Banco"],
+                                          default=st.session_state.get('dados_usuario', {}).get('equipamentos',
+                                                                                                ["Barra", "Halteres",
+                                                                                                 "Máquinas",
+                                                                                                 "Peso Corporal"]))
+
+        st.markdown("---")
+        st.caption("* Campos obrigatórios")
+
+        # Botão para gerar plano
+        if st.form_submit_button("💪 Gerar Meu Plano de Treino Personalizado", type="primary", use_container_width=True):
+            with st.spinner("Gerando seu plano personalizado..."):
+                # Garante que os dados estão completos
+                if not all([nome, peso, altura, idade, nivel, dias_semana, objetivo]):
+                    st.error("Por favor, preencha todos os campos obrigatórios.")
+                    return
+
+                dados_usuario = {
+                    'nome': nome, 'peso': peso, 'altura': altura, 'idade': idade,
+                    'sexo': sexo, 'nivel': nivel, 'dias_semana': dias_semana,
+                    'objetivo': objetivo, 'restricoes': restricoes,
+                    'equipamentos': equipamentos, 'foco': foco_muscular
+                }
+
+                st.session_state['dados_usuario'] = dados_usuario
+
+                # Gera o plano
+                novo_plano = gerar_plano_personalizado(dados_usuario)
+
+                if novo_plano:
+                    st.session_state['plano_treino'] = novo_plano
+
+                    # Salva IMEDIATAMENTE no Firebase
+                    uid = st.session_state.get('user_uid')
+                    if uid:
+                        salvar_dados_usuario_firebase(uid)
+                        st.success("✅ Plano gerado e salvo com sucesso!")
+                    else:
+                        st.success("✅ Plano gerado com sucesso!")
+
+                    st.balloons()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Erro ao gerar o plano. Tente novamente.")
+
+    # Mostra informações do plano atual se existir
+    if st.session_state.get('plano_treino'):
+        st.markdown("---")
+        st.subheader("📋 Seu Plano Atual")
+
+        plano_atual = st.session_state['plano_treino']
+
+        # CORREÇÃO: Verificação segura para DataFrames e listas
+        total_exercicios = 0
+        total_dias = 0
+
+        for nome_treino, treino_data in plano_atual.items():
+            if treino_data is not None:
+                # Se for DataFrame
+                if isinstance(treino_data, pd.DataFrame):
+                    if not treino_data.empty and 'Exercício' in treino_data.columns:
+                        total_exercicios += len(treino_data)
+                        total_dias += 1
+                # Se for lista
+                elif isinstance(treino_data, list) and len(treino_data) > 0:
+                    total_exercicios += len(treino_data)
+                    total_dias += 1
+
+        if total_dias > 0:
+            st.info(f"Seu plano atual tem **{total_dias} dias** de treino com **{total_exercicios} exercícios** no total.")
+        else:
+            st.warning("Plano vazio ou inválido.")
+
+        col_view, col_new = st.columns(2)
+        with col_view:
+            # CORREÇÃO: Usar st.link_button ou st.button com callback
+            if st.button("👀 Ver Meu Treino", use_container_width=True, key="btn_ver_treino"):
+                st.session_state.navigate_to = "Meu Treino"
+                st.rerun()
+
+        with col_new:
+            if st.button("🔄 Gerar Novo Plano", use_container_width=True, key="btn_novo_plano"):
+                # Força a geração de um novo plano diferente
+                novo_plano = gerar_plano_personalizado(st.session_state['dados_usuario'], force_new=True)
+                if novo_plano:
+                    st.session_state['plano_treino'] = novo_plano
+                    uid = st.session_state.get('user_uid')
+                    if uid:
+                        salvar_dados_usuario_firebase(uid)
+                    st.success("🔄 Novo plano gerado com sucesso!")
+                    st.rerun()
+
+    # Informações sobre o questionário
+    with st.expander("ℹ️ Sobre este questionário"):
+        st.markdown("""
+        **Como funciona a geração do plano:**
+
+        - **Iniciantes**: Foco em exercícios fundamentais e aprendizado da técnica
+        - **Intermediários/Avançados**: Maior volume e intensidade, exercícios mais complexos
+        - **Hipertrofia**: 8-12 repetições, descanso 60-90s
+        - **Emagrecimento**: 12-15 repetições, descanso 45-60s  
+        - **Força/Condicionamento**: 15-20 repetições, descanso 30-45s
+
+        O plano é automaticamente ajustado para suas restrições físicas e equipamentos disponíveis.
+        """)
 
 
 def render_meu_treino():
-    st.title("💪 Meu Treino")
-    plano = st.session_state.get('plano_treino')
-    user_role = st.session_state.get('role', 'free')  # Pega o role do usuário
+    st.title("💪 Meu Treino Personalizado")
 
-    # Checagem inicial mais robusta para plano vazio
-    plano_vazio = True
-    if plano and isinstance(plano, dict):
-        for nome_treino, treino_data in plano.items():
-            # Verifica se é um DataFrame não vazio ou uma lista não vazia de dicionários
-            if isinstance(treino_data, pd.DataFrame) and not treino_data.empty:
-                plano_vazio = False;
-                break
-            elif isinstance(treino_data, list) and treino_data and all(isinstance(item, dict) for item in treino_data):
-                plano_vazio = False;
-                break
+    if not st.session_state.get('plano_treino'):
+        st.warning("📝 Você ainda não tem um plano de treino gerado.")
+        st.info("Vá para a página 'Questionário' para gerar seu plano personalizado!")
 
-    if not plano or plano_vazio:
-        st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
+        if st.button("📋 Ir para o Questionário"):
+            st.session_state.selected_page = "Questionário"
+            st.rerun()
         return
 
-    # Exibe a descrição do plano
-    dados = st.session_state.get('dados_usuario') or {}
-    st.info(
-        f"Este plano foi criado para um atleta **{dados.get('nivel', 'N/A')}** treinando **{dados.get('dias_semana', 'N/A')}** dias por semana com foco em **{dados.get('objetivo', 'N/A')}**.")
-    st.markdown("---")
+    plano = st.session_state['plano_treino']
 
-    # Botão Geral de Aquecimento (para todos)
-    if st.button("🔥 Iniciar Aquecimento Padrão", use_container_width=True):
-        st.session_state.warmup_in_progress = True
-        st.session_state['current_routine'] = WARMUP_ROUTINE  # Define a rotina padrão
-        st.session_state.current_routine_exercise_index = 0
-        st.session_state.routine_timer_end = None
-        st.rerun()
+    if not isinstance(plano, dict):
+        st.error("❌ Erro: Formato inválido do plano de treino.")
+        return
 
-    # [NOVO] CTA para rotinas VIP
-    if user_role == 'free':
-        # Botão sutil que leva para a página VIP
-        st.caption("✨ Membros VIP têm acesso a mais rotinas (Mobilidade, Yoga).")
-        if st.button("Saiba mais sobre rotinas VIP", key="cta_warmup_learn_more", type="link",
-                     use_container_width=True):
-            st.session_state['selected_page'] = "Solicitar VIP"
-            st.rerun()
-    else:  # Se for VIP
-        # Botão para rotina VIP (Exemplo)
-        if st.button("🤸‍♂️ Iniciar Aquecimento VIP (Mobilidade)", use_container_width=True):
-            st.session_state.warmup_in_progress = True
-            st.session_state['current_routine'] = WARMUP_ROUTINE_VIP_MOBILITY  # Define a rotina VIP
-            st.session_state.current_routine_exercise_index = 0
-            st.rerun()
+    # Mostrar estatísticas do plano (código otimizado)
+    total_exercicios = 0
+    dias_validos = []
 
-    st.markdown("---")
-
-    # Loop para exibir os treinos (A, B, C...)
     for nome_treino, treino_data in plano.items():
-        # Garante que df_treino seja um DataFrame, tratando se treino_data já é um DF ou uma lista
-        if isinstance(treino_data, pd.DataFrame):
-            df_treino = treino_data
-        elif isinstance(treino_data, list):
-            df_treino = pd.DataFrame(treino_data)  # Converte lista de dicts para DF
+        if treino_data is not None:
+            if isinstance(treino_data, pd.DataFrame):
+                if not treino_data.empty and 'Exercício' in treino_data.columns:
+                    total_exercicios += len(treino_data)
+                    dias_validos.append(nome_treino)
+            elif isinstance(treino_data, list):
+                if len(treino_data) > 0 and all(isinstance(item, dict) for item in treino_data):
+                    total_exercicios += len(treino_data)
+                    dias_validos.append(nome_treino)
+
+    if not dias_validos:
+        st.error("❌ Nenhum treino válido encontrado no plano.")
+        return
+
+    st.success(
+        f"📊 Seu plano tem **{len(dias_validos)} dias** de treino com **{total_exercicios} exercícios** no total.")
+
+    # Botões de ação - AGORA FUNCIONANDO CORRETAMENTE
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Regenerar Plano", type="secondary", use_container_width=True):
+            if st.session_state.get('dados_usuario'):
+                novo_plano = gerar_plano_personalizado(st.session_state['dados_usuario'], force_new=True)
+                if novo_plano:
+                    st.session_state['plano_treino'] = novo_plano
+                    uid = st.session_state.get('user_uid')
+                    if uid:
+                        salvar_dados_usuario_firebase(uid)
+                    st.success("Plano regenerado com sucesso!")
+                    st.rerun()
+            else:
+                st.error("Não foi possível regenerar o plano. Dados do usuário não encontrados.")
+
+    with col2:
+        user_role = st.session_state.get('role', 'free')
+        if user_role in ['vip', 'admin']:
+            if st.button("📚 Biblioteca VIP", type="primary", use_container_width=True):
+                st.session_state.selected_page = "Biblioteca VIP"
+                st.rerun()
         else:
-            df_treino = pd.DataFrame()  # Cria DF vazio se o dado for inválido
-
-        if df_treino.empty: continue  # Pula este dia se não houver exercícios
-
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader(nome_treino)
-            st.caption(f"{len(df_treino)} exercícios")
-        with col2:
-            # Botão para iniciar o modo interativo
-            if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
-                st.session_state.update(
-                    {'workout_in_progress': True, 'current_workout_plan': df_treino.to_dict('records'),
-                     'current_exercise_index': 0, 'workout_log': [], 'rest_timer_end': None})
+            if st.button("⭐ Desbloquear Biblioteca VIP", type="primary", use_container_width=True):
+                st.session_state.selected_page = "Solicitar VIP"
                 st.rerun()
 
-            # Botão para registro rápido (contabilizar frequência)
-            if st.button("✅ Marcar Concluído", key=f"quick_complete_{nome_treino}", use_container_width=True):
-                hoje = date.today()
-                frequencia_atual = st.session_state.get('frequencia', [])
-                if hoje not in frequencia_atual:
-                    frequencia_atual.append(hoje);
-                    st.session_state['frequencia'] = frequencia_atual
-                    salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
-                    st.toast(f"Ótimo! Treino '{nome_treino}' contabilizado para hoje.")
-                else:
-                    st.toast("O treino de hoje já foi contabilizado!")
-            st.caption("Marca o dia como treinado.")
+    st.markdown("---")
 
-        # Expanders para os exercícios
+    # Mostrar cada dia de treino (apenas os dias válidos)
+    for nome_treino in dias_validos:
+        treino_data = plano[nome_treino]
+
+        # CORREÇÃO: Substituir a verificação booleana problemática
+        if treino_data is None:
+            continue
+
+        # Verificação específica para DataFrame vazio
+        if isinstance(treino_data, pd.DataFrame):
+            if treino_data.empty:
+                continue
+        # Verificação específica para lista vazia
+        elif isinstance(treino_data, list):
+            if len(treino_data) == 0:
+                continue
+
+        # Converter para DataFrame se for lista
+        if isinstance(treino_data, list):
+            df_treino = pd.DataFrame(treino_data)
+        else:
+            df_treino = treino_data
+
+        # CORREÇÃO: Verificar se o DataFrame resultante não está vazio
+        if df_treino.empty or 'Exercício' not in df_treino.columns:
+            continue
+
+        col_header, col_action = st.columns([3, 1])
+
+        with col_header:
+            st.subheader(nome_treino)
+            st.caption(f"{len(df_treino)} exercícios")
+
+        with col_action:
+            hoje = date.today()
+            frequencia = st.session_state.get('frequencia', [])
+            ja_treinou = hoje in frequencia
+
+            if ja_treinou:
+                st.success("✅ Treinado hoje")
+            else:
+                if st.button("🏁 Marcar como treinado", key=f"btn_{nome_treino}"):
+                    if hoje not in frequencia:
+                        frequencia.append(hoje)
+                        st.session_state['frequencia'] = frequencia
+                        salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+                        st.success(f"✅ {nome_treino} marcado como treinado!")
+                        st.rerun()
+
+        # Mostrar exercícios
         for index, row in df_treino.iterrows():
-            exercicio = row['Exercício']
-            series = row['Séries']
-            repeticoes = row['Repetições']
-            descanso = row['Descanso']
+            exercicio = row.get('Exercício', 'N/A')
+            series = row.get('Séries', 'N/A')
+            repeticoes = row.get('Repetições', 'N/A')
+            descanso = row.get('Descanso', 'N/A')
 
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col_media, col_instr = st.columns([1, 2])  # Proporção [1, 2]
+                col_media, col_instr = st.columns([1, 2])
 
                 with col_media:
                     video_url = find_exercise_video_youtube(exercicio)
@@ -3394,30 +4283,23 @@ def render_meu_treino():
                         st.info("Vídeo de execução indisponível.")
 
                 with col_instr:
-                    st.markdown("##### 📋 **Instruções**")
+                    st.markdown("##### 📋 Instruções")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
-                    st.markdown("---")
 
-                    ex_data = EXERCICIOS_DB.get(exercicio, {})
-                    grupo_muscular = ex_data.get('grupo', 'N/A')
-                    equipamento = ex_data.get('equipamento', 'N/A')
-                    descricao_exercicio = ex_data.get('descricao')
-
-                    st.write(f"**Grupo Muscular:** {grupo_muscular}")
-                    st.write(f"**Equipamento:** {equipamento}")
-
-                    if descricao_exercicio:
+                    ex_data = EXERCICIOS_DB.get(exercicio)
+                    if ex_data:
                         st.markdown("---")
-                        st.markdown(f"**📝 Como Fazer:**\n{descricao_exercicio}")
+                        st.write(f"**Grupo Muscular:** {ex_data.get('grupo', 'N/A')}")
+                        st.write(f"**Tipo:** {ex_data.get('tipo', 'N/A')}")
+                        st.write(f"**Equipamento:** {ex_data.get('equipamento', 'N/A')}")
+                        if ex_data.get('descricao'):
+                            st.markdown("---")
+                            st.markdown(f"**📝 Como Fazer:**\n{ex_data.get('descricao')}")
+                    else:
+                        st.warning(f"Exercício '{exercicio}' não encontrado na base de dados.")
 
-                    st.markdown(" ")  # Espaço
-                    st.button("🔄 Trocar Exercício",
-                              key=f"swap_{nome_treino}_{index}",
-                              on_click=trocar_exercicio,
-                              args=(nome_treino, index, exercicio),
-                              use_container_width=True)
-        st.markdown("---")  # Separador entre os treinos (A, B, C...)
+        st.markdown("---")
 
 
 def render_registrar_treino():
@@ -3914,80 +4796,214 @@ def render_medidas():
 
 
 def render_planner():
-    st.title("🗓️ Planejamento Semanal Sugerido")
-    dados_usuario = st.session_state.get('dados_usuario') or {}
-    plano_treino = st.session_state.get('plano_treino')
+    st.title("📅 Planejamento Semanal")
 
-    if not dados_usuario or not plano_treino:
-        st.warning("Preencha o questionário para gerar seu plano e visualizar o planejamento.")
+    if not st.session_state.get('plano_treino'):
+        st.warning("Você precisa gerar um plano de treino primeiro no Questionário!")
+        if st.button("Ir para Questionário"):
+            st.session_state.selected_page = "Questionário"
+            st.rerun()
         return
 
-    dias_semana_num = dados_usuario.get('dias_semana', 3)
+    dados_usuario = st.session_state.get('dados_usuario', {})
+    dias_semana = dados_usuario.get('dias_semana', 3)
+    plano_treino = st.session_state.get('plano_treino', {})
+    user_role = st.session_state.get('role', 'free')
 
-    # Mapeamento de índice de dia da semana para nome
-    dias_nomes = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    # Inicializa o planejamento semanal se não existir
+    if 'planejamento_semanal' not in st.session_state:
+        st.session_state.planejamento_semanal = {}
 
-    # Obtém os índices dos dias sugeridos (0=Seg, 6=Dom)
-    suggested_day_indices = suggest_days(dias_semana_num)
-    suggested_day_names = [dias_nomes[i] for i in suggested_day_indices]
+    # ========== SEÇÃO DE PLANEJAMENTO AUTOMÁTICO (APENAS VIP) ==========
+    if user_role in ['vip', 'admin']:
+        st.subheader("🤖 Planejamento Automático VIP")
 
-    st.info(
-        f"Com base nos seus **{dias_semana_num} dias/semana**, sugerimos treinar em: **{', '.join(suggested_day_names)}**.")
-    st.markdown("---")
-    st.subheader("Próximos 7 Dias:")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.success("⭐ **Recurso Exclusivo VIP**")
+            st.info("Gere automaticamente um cronograma semanal otimizado baseado no seu plano de treino.")
 
-    # Pega os nomes dos treinos (A, B, C...) em ordem
-    nomes_treinos = list(plano_treino.keys())
-    # Cria um 'ciclo' para repetir os nomes dos treinos (A, B, C, A, B, C...)
-    ciclo_treinos = cycle(nomes_treinos)
+        with col2:
+            if st.button("🎯 Gerar Planejamento Automático", use_container_width=True, type="primary"):
+                with st.spinner("Gerando planejamento otimizado..."):
+                    planejamento_auto = gerar_planejamento_automatico(dias_semana, plano_treino)
+                    st.session_state.planejamento_semanal = planejamento_auto
+                    st.success("Planejamento automático gerado com sucesso!")
+                    st.rerun()
 
-    # Calcula as datas para os próximos 7 dias
-    hoje = datetime.now().date()
-    proximos_7_dias = [(hoje + timedelta(days=i)) for i in range(7)]
+    else:
+        # ========== SEÇÃO PARA USUÁRIOS FREE ==========
+        st.subheader("🤖 Planejamento Automático")
 
-    # Cria 7 colunas para exibir os dias
-    cols = st.columns(7)
+        with st.container(border=True):
+            st.warning("🔒 Recurso Exclusivo VIP")
+            st.info("O planejamento automático inteligente está disponível apenas para usuários VIP.")
+            st.markdown("""
+            **Desbloqueie com o VIP:**
+            - ✅ Geração automática de cronogramas
+            - ✅ Distribuição inteligente de treinos  
+            - ✅ Otimização baseada em seus objetivos
+            - ✅ Estratégias avançadas (PPL, Upper/Lower, etc.)
+            """)
 
-    treino_counter = 0  # Contador para saber qual treino (A, B, C) usar
-
-    for i, dia_data in enumerate(proximos_7_dias):
-        dia_semana_idx = dia_data.weekday()  # 0 para Segunda, 6 para Domingo
-        nome_dia_semana = dias_nomes[dia_semana_idx]
-        data_formatada = dia_data.strftime("%d/%m")
-
-        # Verifica se este dia da semana é um dia sugerido para treino
-        is_training_day = dia_semana_idx in suggested_day_indices
-
-        with cols[i]:
-            # Define o estilo do "cartão" do dia
-            background_color = "#2E4053" if is_training_day else "#1C2833"  # Cor mais escura para descanso
-            border_style = "2px solid #5DADE2" if is_training_day else "1px solid #566573"  # Borda destacada para treino
-
-            st.markdown(f"""
-            <div style="background-color:{background_color}; border:{border_style}; border-radius:10px; padding:15px; text-align:center; height:150px; display:flex; flex-direction:column; justify-content:space-between;">
-                <div style="font-weight:bold; font-size:1.1em;">{nome_dia_semana}</div>
-                <div style="font-size:0.9em; color:#AEB6BF;">{data_formatada}</div>
-            """, unsafe_allow_html=True)
-
-            if is_training_day:
-                # Pega o próximo nome de treino do ciclo
-                nome_treino_do_dia = next(ciclo_treinos)
-                st.markdown(f"""
-                    <div style="font-size:1.5em;">💪</div>
-                    <div style="font-weight:bold; color:#5DADE2;">Treino</div>
-                    <div style="font-size:0.8em; color:#AEB6BF;">({nome_treino_do_dia.split(':')[0]})</div> 
-                    </div> 
-                """, unsafe_allow_html=True)  # Fecha o div do cartão
-            else:
-                st.markdown(f"""
-                    <div style="font-size:1.5em;">🧘</div>
-                    <div style="color:#85929E;">Descanso</div>
-                    </div>
-                """, unsafe_allow_html=True)  # Fecha o div do cartão
+            if st.button("⭐ Tornar-se VIP", type="primary", use_container_width=True):
+                st.session_state.selected_page = "Solicitar VIP"
+                st.rerun()
 
     st.markdown("---")
-    st.caption("Este é um planejamento sugerido. Sinta-se à vontade para ajustar à sua rotina.")
 
+    # ========== SEÇÃO DE AJUSTE MANUAL (PARA TODOS) ==========
+    st.subheader("✏️ Ajuste Manual do Planejamento")
+    st.caption("Disponível para todos os usuários - Configure manualmente sua semana de treinos:")
+
+    DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    opcoes_treino = ["Descanso"] + list(plano_treino.keys())
+
+    planejamento_atual = st.session_state.get('planejamento_semanal', {})
+
+    # Garante que todos os dias estão no planejamento
+    for dia in DIAS_SEMANA:
+        if dia not in planejamento_atual:
+            planejamento_atual[dia] = "Descanso"
+
+    # Interface de edição manual
+    with st.form("form_planejamento_manual"):
+        st.write("**Defina o treino para cada dia:**")
+
+        colunas = st.columns(2)
+        for i, dia in enumerate(DIAS_SEMANA):
+            with colunas[i % 2]:
+                treino_atual = planejamento_atual.get(dia, "Descanso")
+                novo_treino = st.selectbox(
+                    f"{dia}",
+                    opcoes_treino,
+                    index=opcoes_treino.index(treino_atual) if treino_atual in opcoes_treino else 0,
+                    key=f"select_{dia}"
+                )
+                planejamento_atual[dia] = novo_treino
+
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.form_submit_button("💾 Salvar Planejamento Manual", use_container_width=True):
+                st.session_state.planejamento_semanal = planejamento_atual
+                st.success("Planejamento salvo com sucesso!")
+
+        with col_btn2:
+            if st.form_submit_button("🔄 Limpar Planejamento", use_container_width=True):
+                st.session_state.planejamento_semanal = {}
+                st.success("Planejamento limpo!")
+
+    st.markdown("---")
+
+    # ========== VISUALIZAÇÃO DO PLANEJAMENTO ==========
+    st.subheader("👀 Visualização do Seu Planejamento Semanal")
+
+    if not st.session_state.planejamento_semanal:
+        if user_role in ['vip', 'admin']:
+            st.info("💡 Use o gerador automático VIP ou configure manualmente acima.")
+        else:
+            st.info("💡 Configure manualmente seu planejamento semanal acima.")
+    else:
+        # Estatísticas do planejamento
+        dias_treino = [dia for dia, treino in st.session_state.planejamento_semanal.items() if treino != "Descanso"]
+        dias_descanso = [dia for dia, treino in st.session_state.planejamento_semanal.items() if treino == "Descanso"]
+
+        col_stat1, col_stat2, col_stat3 = st.columns(3)
+        col_stat1.metric("Dias de Treino", len(dias_treino))
+        col_stat2.metric("Dias de Descanso", len(dias_descanso))
+        col_stat3.metric("Treinos Diferentes", len(set(st.session_state.planejamento_semanal.values()) - {"Descanso"}))
+
+        # Grade visual do planejamento
+        st.write("**📊 Seu Cronograma Semanal:**")
+
+        colunas_semana = st.columns(7)
+
+        for i, dia in enumerate(DIAS_SEMANA):
+            with colunas_semana[i]:
+                treino = st.session_state.planejamento_semanal.get(dia, "Descanso")
+
+                if treino == "Descanso":
+                    st.error("😴 Descanso")
+                    st.caption("Dia de recuperação")
+                else:
+                    st.success(f"🏋️ {treino}")
+                    # Mostra quantos exercícios tem nesse treino
+                    num_exercicios = len(plano_treino.get(treino, []))
+                    st.caption(f"{num_exercicios} exercícios")
+
+        # Botão para aplicar o planejamento
+        st.markdown("---")
+        if st.button("✅ Aplicar Este Planejamento", type="primary", use_container_width=True):
+            # Salva o planejamento nos dados do usuário
+            if 'dados_usuario' not in st.session_state:
+                st.session_state.dados_usuario = {}
+
+            st.session_state.dados_usuario['planejamento_semanal'] = st.session_state.planejamento_semanal
+            st.session_state.dados_usuario['dias_semana_list'] = [DIAS_SEMANA.index(dia) for dia in dias_treino]
+
+            # Salva no Firebase
+            uid = st.session_state.get('user_uid')
+            if uid:
+                salvar_dados_usuario_firebase(uid)
+
+            st.success("🎉 Planejamento aplicado com sucesso! Você receberá lembretes nos dias de treino.")
+
+    # ========== DICAS E INFORMAÇÕES ==========
+    with st.expander("💡 Dicas para um Bom Planejamento"):
+        if user_role in ['vip', 'admin']:
+            st.markdown("""
+            **🌟 Dicas VIP:**
+            - Use o **gerador automático** como base e ajuste conforme necessário
+            - **Distribua grupos musculares**: Evite treinar o mesmo grupo em dias consecutivos
+            - **Inclua descansos**: Músculos crescem durante o descanso
+            - **Revise periodicamente**: Ajuste o planejamento a cada 4-6 semanas
+            """)
+        else:
+            st.markdown("""
+            **📋 Dicas para Planejamento Manual:**
+            - **Distribua grupos musculares**: Evite treinar o mesmo grupo em dias consecutivos
+            - **Inclua descansos**: Músculos crescem durante o descanso (recomendado: 1-2 dias/semana)
+            - **Ouça seu corpo**: Ajuste conforme sua recuperação
+            - **Mantenha consistência**: Seguir o cronograma é mais importante que a intensidade
+
+            **💡 Exemplo de Distribuição:**
+            - **2 dias/semana**: Superior + Inferior
+            - **3 dias/semana**: Push + Pull + Legs ou ABC
+            - **4 dias/semana**: Upper + Lower 2x
+            - **5+ dias/semana**: PPL + Upper/Lower ou especialização
+            """)
+
+    # ========== UPSELL PARA VIP ==========
+    if user_role not in ['vip', 'admin']:
+        st.markdown("---")
+        with st.container(border=True):
+            st.subheader("🚀 Quer economizar tempo?")
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown("""
+                **Torne-se VIP e ganhe acesso ao:**
+                - ✅ **Gerador automático** de planejamento
+                - ✅ **Distribuição inteligente** baseada em seu perfil
+                - ✅ **Estratégias avançadas** (PPL, Upper/Lower, etc.)
+                - ✅ **Otimização automática** de descansos
+                """)
+            with col2:
+                if st.button("⭐ Virar VIP", use_container_width=True, type="primary"):
+                    st.session_state.selected_page = "Solicitar VIP"
+                    st.rerun()
+
+
+def verificar_treino_do_dia():
+    """Verifica qual é o treino programado para hoje"""
+    planejamento = st.session_state.get('dados_usuario', {}).get('planejamento_semanal', {})
+    if not planejamento:
+        return None
+
+    DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    dia_atual = datetime.now().weekday()
+    nome_dia_atual = DIAS_SEMANA[dia_atual]
+
+    return planejamento.get(nome_dia_atual, "Descanso")
 
 def suggest_days(dias_sem: int):
     if dias_sem <= 0: return []
@@ -4184,7 +5200,11 @@ def render_export_backup():
 # ---------------------------
 # [MODIFICADO] Função run() para verificar o token do Hugging Face
 def run():
-    # Lógica de login (permanece a mesma)
+    # ========== ADICIONE ESTA LINHA NO INÍCIO ==========
+    ensure_session_defaults()  # ← GARANTE QUE TUDO ESTÁ INICIALIZADO
+    # ===================================================
+
+    # Lógica de login
     if not st.session_state.get('usuario_logado'):
         uid_from_cookie = cookies.get('user_uid')
         if uid_from_cookie:
@@ -4198,6 +5218,7 @@ def run():
                     del cookies['user_uid']
             except Exception as e:
                 st.error(f"Erro ao tentar login automático: {e}")
+
     if not st.session_state.get('usuario_logado'):
         render_auth()
     else:
