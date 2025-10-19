@@ -29,6 +29,9 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 from itertools import cycle
 
+
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -167,28 +170,26 @@ def ensure_session_defaults():
         'medidas': [],
         'feedbacks': [],
         'ciclo_atual': None,
-        'role': None,
+        'role': 'free', # <-- Adicionado esta linha, default é 'free'
         'notificacoes': [],
         'settings': {'theme': 'light', 'notify_on_login': True},
         'offline_mode': False,
         'confirm_excluir_foto': False,
         'foto_a_excluir': None,
-
-        # Variáveis para o Modo Treino
         'workout_in_progress': False,
         'current_workout_plan': None,
         'current_exercise_index': 0,
         'workout_log': [],
         'rest_timer_end': None,
+        'warmup_in_progress': False,
+        'cooldown_in_progress': False,
+        'current_routine_exercise_index': 0,
+        'routine_timer_end': None, # Mantido caso queira reativar timer
+        'timer_finished_flag': False, # Mantido caso queira reativar timer
+        'confirm_reset': False, # Para a função de reset
     }
     for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-
-ensure_session_defaults()
-
-
+        st.session_state.setdefault(k, v)
 # ---------------------------
 # Função para buscar GIF de exercício
 # ---------------------------
@@ -325,186 +326,818 @@ def trocar_exercicio(nome_treino, exercise_index, exercicio_atual):
 # ---------------------------
 # Banco de Exercícios Expandido
 # ---------------------------
+WARMUP_ROUTINE_VIP_MOBILITY = [
+    {"nome": "Gato-Camelo (Mobilidade Coluna)", "duracao_s": 60, "descricao": "Em quatro apoios, alterne arquear e arredondar a coluna."},
+    {"nome": "Rotação Torácica (Quatro Apoios)", "duracao_s": 45, "descricao": "Em quatro apoios, leve uma mão à nuca e gire o tronco, apontando o cotovelo para o teto."},
+    {"nome": "Círculos de Quadril (Em pé)", "duracao_s": 60, "descricao": "Em pé, mãos na cintura, faça círculos amplos com o quadril."},
+    {"nome": "Alongamento Maior Alongamento do Mundo", "duracao_s": 60, "descricao": "Posição de afundo, mão interna no chão, rotacione o tronco elevando o braço externo."},
+    {"nome": "Agachamento Cossaco (Mobilidade)", "duracao_s": 60, "descricao": "Pernas afastadas, transfira o peso para um lado, agachando lateralmente enquanto a outra perna estende."},
+]
+
+COOLDOWN_ROUTINE_VIP_YOGA = [
+    {"nome": "Postura da Criança (Yoga Balasana)", "duracao_s": 60, "descricao": "Ajoelhado, sente-se sobre os calcanhares e incline o tronco à frente, testa no chão, braços relaxados."},
+    {"nome": "Cachorro Olhando Para Baixo (Yoga Adho Mukha)", "duracao_s": 45, "descricao": "Forme um V invertido com o corpo, alongando costas e posteriores."},
+    {"nome": "Alongamento Gato-Vaca Sentado (Yoga Marjaryasana/Bitilasana)", "duracao_s": 60, "descricao": "Sentado, alterne arredondar e arquear a coluna."},
+    {"nome": "Torção Sentado (Yoga Ardha Matsyendrasana)", "duracao_s": 30, "descricao": "Sentado, cruze uma perna sobre a outra e torça o tronco suavemente."},
+    {"nome": "Alongamento Borboleta (Yoga Baddha Konasana)", "duracao_s": 45, "descricao": "Sentado, junte as solas dos pés e puxe-os para perto, deixe os joelhos caírem para os lados."},
+]
+ALIMENTOS_DB = {
+    "Proteínas": ["Peito de Frango", "Tilápia/Peixe Branco", "Ovos", "Clara de Ovo", "Whey Protein", "Carne Vermelha Magra (Patinho, Filé Mignon)", "Tofu", "Queijo Cottage", "Iogurte Grego Natural"],
+    "Carboidratos": ["Arroz Branco/Integral", "Batata Doce", "Batata Inglesa", "Mandioca (Aipim)", "Aveia", "Pão Integral", "Frutas (Banana, Maçã, Mamão)", "Macarrão Integral", "Feijão", "Lentilha"],
+    "Gorduras": ["Azeite de Oliva Extra Virgem", "Abacate", "Castanhas (Nozes, Amêndoas)", "Pasta de Amendoim Integral", "Gema de Ovo", "Sementes (Chia, Linhaça)", "Salmão"]
+}
+# (O resto do seu código, como EXERCICIOS_DB, continua abaixo)
 EXERCICIOS_DB = {
-    # Pernas (Foco Quadríceps/Geral)
+    # ==================== PERNAS ====================
+    # Foco Quadríceps/Geral
     'Agachamento com Barra': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Joelhos'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Joelhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Barra apoiada nos ombros/trapézio. Pés afastados na largura dos ombros. Desça flexionando quadril e joelhos, mantendo a coluna neutra e o peito aberto. Suba estendendo quadril e joelhos.'
     },
+    'Agachamento Frontal': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Joelhos', 'Punhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Barra apoiada na parte frontal dos ombros, cotovelos apontando para frente. Mantém o tronco mais ereto que o agachamento tradicional. Desça mantendo o peito aberto e suba estendendo as pernas.'
+    },
     'Agachamento com Halteres': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Segure halteres ao lado do corpo com as palmas voltadas para dentro. Mantenha o tronco ereto, desça flexionando quadril e joelhos. Suba estendendo.'
     },
     'Agachamento Goblet': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Segure um halter verticalmente contra o peito. Pés levemente mais afastados que os ombros. Desça o mais fundo possível, mantendo o tronco ereto e os cotovelos entre os joelhos. Suba.'
     },
+    'Agachamento Búlgaro': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Halteres', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Uma perna à frente, a outra com o peito do pé apoiado em um banco atrás. Segure halteres ao lado do corpo ou sem peso. Desça flexionando o joelho da frente até aproximadamente 90°. Suba estendendo.'
+    },
+    'Afundo (Passada)': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Halteres/Barra', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé, dê um passo largo à frente e desça flexionando ambos os joelhos até formar ângulos de 90°. A perna de trás quase toca o chão. Empurre com a perna da frente para voltar à posição inicial. Alterne as pernas.'
+    },
+    'Afundo Estacionário': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Halteres', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Mantenha uma perna à frente e outra atrás em posição fixa. Desça verticalmente flexionando os joelhos. Suba mantendo a mesma posição dos pés. Complete as repetições e troque de perna.'
+    },
     'Leg Press 45°': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Sente-se na máquina com as costas bem apoiadas. Pés na plataforma afastados na largura dos ombros. Destrave e desça controladamente flexionando os joelhos (aprox. 90°). Empurre de volta à posição inicial sem travar os joelhos.'
     },
+    'Hack Squat': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Posicione-se na máquina com as costas apoiadas e pés na plataforma. Ombros sob os apoios. Destrave e desça flexionando os joelhos profundamente. Empurre para cima até quase estender completamente.'
+    },
     'Cadeira Extensora': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Sente-se na máquina, ajuste o apoio dos tornozelos. Estenda completamente os joelhos, levantando o peso. Retorne controladamente à posição inicial.'
     },
-    # Pernas (Foco Posterior)
-    'Mesa Flexora': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Deite-se de bruços na máquina, joelhos alinhados com o eixo, tornozelos sob o apoio. Flexione os joelhos trazendo os calcanhares em direção aos glúteos. Retorne controladamente.'
-    },
-    'Stiff com Halteres': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar'], 'niveis_permitidos': ['Intermediário/Avançado'],
-        'descricao': 'Em pé, segure halteres na frente das coxas. Mantenha os joelhos levemente flexionados (quase estendidos). Desça o tronco projetando o quadril para trás, mantendo a coluna reta e os halteres próximos às pernas. Suba contraindo posteriores e glúteos.'
-    },
-    # Glúteos (Considerados como parte de 'Pernas')
-    'Elevação Pélvica': {
-        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Barra', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Deitado de costas com os ombros apoiados em um banco e joelhos flexionados. Apoie uma barra sobre o quadril. Desça o quadril e eleve-o o máximo possível, contraindo os glúteos no topo. Controle a descida.'
-    },
-    'Extensão de Quadril (Coice)': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal/Caneleiras/Polia', 'restricoes': ['Lombar'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Em quatro apoios ou em pé na polia/com caneleiras. Estenda uma perna para trás e para cima, contraindo o glúteo. Mantenha o abdômen contraído e evite arquear a lombar. Retorne controladamente.'
-    },
-    'Abdução de Quadril': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina/Elásticos/Peso Corporal', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Sentado na máquina abdutora, deitado de lado, ou em pé com elásticos/caneleiras. Afaste a(s) perna(s) lateralmente contra a resistência, focando no glúteo lateral (médio/mínimo). Retorne controladamente.'
-    },
-    'Glúteo Sapinho (Frog Pump)': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Deitado de costas, junte as solas dos pés e afaste os joelhos (posição de "sapo"). Calcanhares próximos aos glúteos. Eleve o quadril do chão, contraindo fortemente os glúteos. Desça controladamente.'
-     },
-    # Panturrilhas
-    'Panturrilha no Leg Press': {
-        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
-        'descricao': 'Sentado no Leg Press, ponta dos pés na parte inferior da plataforma, calcanhares para fora. Joelhos estendidos (não travados). Empurre a plataforma apenas com a flexão plantar. Retorne alongando.'
+    'Sissy Squat': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé, segure em um apoio para equilíbrio. Incline o tronco para trás enquanto flexiona os joelhos, mantendo quadril, tronco e coxas alinhados. Desça controladamente e volte contraindo os quadríceps.'
     },
 
-    # Peito
+    # Foco Posterior (Isquiotibiais)
+    'Mesa Flexora': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deite-se de bruços na máquina, joelhos alinhados com o eixo, tornozelos sob o apoio. Flexione os joelhos trazendo os calcanhares em direção aos glúteos. Retorne controladamente.'
+    },
+    'Mesa Flexora Sentada': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina com as costas apoiadas, tornozelos sobre o apoio. Flexione os joelhos puxando os calcanhares para baixo. Retorne controladamente.'
+    },
+    'Stiff com Halteres': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé, segure halteres na frente das coxas. Mantenha os joelhos levemente flexionados (quase estendidos). Desça o tronco projetando o quadril para trás, mantendo a coluna reta e os halteres próximos às pernas. Suba contraindo posteriores e glúteos.'
+    },
+    'Stiff com Barra': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé, segure a barra com pegada pronada. Mantenha joelhos levemente flexionados. Desça inclinando o tronco e projetando o quadril para trás, barra próxima às pernas. Suba contraindo posteriores.'
+    },
+    'Levantamento Terra Romeno': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra/Halteres', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Similar ao stiff, mas inicia com a barra já elevada (não do chão). Desça até a barra atingir aproximadamente a altura dos joelhos/canelas. Foco na fase excêntrica dos posteriores.'
+    },
+    'Levantamento Terra': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Barra no chão. Pés sob a barra, na largura do quadril. Agache, segure a barra com pegada pronada. Mantenha coluna neutra, peito aberto. Levante estendendo quadril e joelhos simultaneamente até ficar completamente ereto. Desça controladamente.'
+    },
+    'Good Morning': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Barra/Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Barra apoiada nos ombros (como agachamento). Em pé, joelhos levemente flexionados. Incline o tronco para frente projetando o quadril para trás, mantendo coluna reta. Volte contraindo posteriores e lombar.'
+    },
+
+    # Glúteos
+    'Elevação Pélvica': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Barra', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de costas com os ombros apoiados em um banco e joelhos flexionados. Apoie uma barra sobre o quadril. Desça o quadril e eleve-o o máximo possível, contraindo os glúteos no topo. Controle a descida.'
+    },
+    'Hip Thrust Unilateral': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar à elevação pélvica, mas executada com uma perna de cada vez. Outra perna estendida no ar. Aumenta a ativação do glúteo trabalhado.'
+    },
+    'Extensão de Quadril (Coice)': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal/Caneleiras/Polia', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em quatro apoios ou em pé na polia/com caneleiras. Estenda uma perna para trás e para cima, contraindo o glúteo. Mantenha o abdômen contraído e evite arquear a lombar. Retorne controladamente.'
+    },
+    'Coice na Polia (Cabo)': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé de frente para a polia baixa, prenda o tornozelo no cabo. Estenda o quadril levando a perna para trás, contraindo o glúteo. Controle o retorno.'
+    },
+    'Abdução de Quadril': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina/Elásticos/Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina abdutora, deitado de lado, ou em pé com elásticos/caneleiras. Afaste a(s) perna(s) lateralmente contra a resistência, focando no glúteo lateral (médio/mínimo). Retorne controladamente.'
+    },
+    'Abdução Deitado de Lado': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal/Caneleiras', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de lado, perna de baixo flexionada para apoio. Eleve a perna de cima lateralmente mantendo-a estendida. Contraia o glúteo médio. Desça controladamente.'
+    },
+    'Glúteo Sapinho (Frog Pump)': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de costas, junte as solas dos pés e afaste os joelhos (posição de "sapo"). Calcanhares próximos aos glúteos. Eleve o quadril do chão, contraindo fortemente os glúteos. Desça controladamente.'
+    },
+    'Step Up': {
+        'grupo': 'Pernas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal/Halteres', 'restricoes': ['Joelhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em frente a um banco ou caixa. Suba colocando um pé completamente sobre o banco, empurre com essa perna (não impulsione com a de trás). Fique em pé sobre o banco. Desça controladamente. Alterne as pernas.'
+    },
+
+    # Panturrilhas
+    'Panturrilha no Leg Press': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado no Leg Press, ponta dos pés na parte inferior da plataforma, calcanhares para fora. Joelhos estendidos (não travados). Empurre a plataforma apenas com a flexão plantar. Retorne alongando.'
+    },
+    'Panturrilha em Pé (Máquina)': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé na máquina específica, ombros sob os apoios, ponta dos pés na plataforma. Eleve os calcanhares o máximo possível contraindo as panturrilhas. Desça alongando completamente.'
+    },
+    'Panturrilha Sentado (Máquina)': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina específica, joelhos sob os apoios, ponta dos pés na plataforma. Eleve os calcanhares contraindo as panturrilhas (foco no sóleo). Desça alongando.'
+    },
+    'Panturrilha com Halteres': {
+        'grupo': 'Pernas', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé com halteres nas mãos, ponta dos pés em uma elevação (step ou anilha). Eleve os calcanhares o máximo possível. Desça alongando completamente. Pode ser feito unilateral para maior amplitude.'
+    },
+
+    # ==================== PEITO ====================
     'Supino Reto com Barra': {
-        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Deitado no banco reto, pés firmes no chão. Pegada na barra um pouco mais larga que os ombros. Desça a barra controladamente até tocar levemente o meio do peito. Empurre a barra de volta para cima.'
     },
     'Supino Reto com Halteres': {
-        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado no banco reto, segure os halteres acima do peito com as palmas para frente. Desça os halteres lateralmente, flexionando os cotovelos. Empurre os halteres de volta para cima.'
     },
+    'Supino Inclinado com Barra': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado em banco inclinado (30-45°). Pegada similar ao supino reto. Desça a barra em direção à parte superior do peito. Empurre para cima.'
+    },
     'Supino Inclinado com Halteres': {
-        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado em um banco inclinado (30-45°). Movimento similar ao supino reto com halteres, mas descendo os pesos em direção à parte superior do peito.'
     },
+    'Supino Declinado': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Barra/Halteres', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado em banco declinado (cabeça mais baixa que o quadril), pés presos. Desça a barra/halteres em direção à parte inferior do peito. Empurre para cima. Foco no peitoral inferior.'
+    },
     'Crucifixo com Halteres': {
-        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado no banco reto, halteres acima do peito, palmas das mãos voltadas uma para a outra, cotovelos levemente flexionados. Abra os braços descendo os halteres lateralmente em um arco. Retorne à posição inicial contraindo o peito.'
     },
+    'Crucifixo Inclinado': {
+        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar ao crucifixo reto, mas executado em banco inclinado (30-45°). Maior ênfase no peitoral superior.'
+    },
+    'Crucifixo na Polia (Cross Over)': {
+        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé entre as polias altas, segure as manoplas. Incline levemente o tronco à frente. Com cotovelos levemente flexionados, puxe as manoplas em um arco para frente, juntando-as na frente do peito. Retorne controladamente.'
+    },
+    'Peck Deck (Voador)': {
+        'grupo': 'Peito', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina, costas apoiadas. Cotovelos nos apoios ou segurando as manoplas. Junte os braços à frente do peito contraindo o peitoral. Retorne controladamente.'
+    },
     'Flexão de Braço': {
-        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Mãos no chão afastadas na largura dos ombros (ou um pouco mais). Corpo reto da cabeça aos calcanhares. Desça o peito flexionando os cotovelos. Empurre de volta à posição inicial.'
     },
+    'Flexão Declinada': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Pés elevados em um banco, mãos no chão. Execução similar à flexão tradicional, mas com maior ênfase no peitoral superior devido ao ângulo.'
+    },
+    'Flexão Inclinada': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Punhos'],
+        'niveis_permitidos': ['Iniciante'],
+        'descricao': 'Mãos elevadas em um banco ou barra, pés no chão. Versão mais fácil da flexão tradicional, ideal para iniciantes.'
+    },
+    'Supino na Máquina': {
+        'grupo': 'Peito', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina de supino, costas apoiadas. Empurre as manoplas para frente estendendo os cotovelos. Retorne controladamente. Movimento guiado e seguro.'
+    },
 
-    # Costas
+    # ==================== COSTAS ====================
     'Barra Fixa': {
-        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': [], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Pendure-se na barra com pegada pronada (palmas para frente) ou supinada (palmas para você), mãos afastadas na largura dos ombros ou mais. Puxe o corpo para cima até o queixo passar a barra, contraindo as costas. Desça controladamente.'
     },
+    'Barra Fixa Supinada': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Similar à barra fixa, mas com pegada supinada (palmas voltadas para você). Mãos na largura dos ombros. Maior ativação dos bíceps e parte inferior do latíssimo.'
+    },
     'Puxada Alta (Lat Pulldown)': {
-        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Sentado na máquina, ajuste o apoio dos joelhos. Pegada na barra mais larga que os ombros. Puxe a barra verticalmente em direção à parte superior do peito, mantendo o tronco estável e contraindo as costas. Retorne controladamente.'
     },
+    'Puxada Frontal com Pegada Fechada': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar à puxada alta, mas com pegada neutra ou supinada fechada (mãos próximas). Maior ativação da parte inferior do latíssimo e bíceps.'
+    },
+    'Puxada com Triângulo': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Na polia alta, use o acessório em forma de V (triângulo). Pegada neutra. Puxe em direção ao peito, mantendo cotovelos próximos ao corpo.'
+    },
     'Remada Curvada com Barra': {
-        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Incline o tronco à frente (45-60°), mantendo a coluna reta e os joelhos levemente flexionados. Pegada pronada na barra. Puxe a barra em direção ao abdômen/peito baixo, contraindo as costas. Desça controladamente.'
     },
+    'Remada Curvada Supinada': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Similar à remada curvada, mas com pegada supinada (palmas para cima). Maior ativação dos bíceps e parte inferior do latíssimo.'
+    },
     'Remada Sentada (máquina)': {
-        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Sentado na máquina com o peito apoiado (se houver). Puxe as manoplas/pegadores em direção ao corpo, mantendo os cotovelos próximos ao tronco e contraindo as escápulas. Retorne controladamente.'
     },
+    'Remada na Polia Baixa': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado de frente para a polia baixa, pés apoiados. Puxe a barra/triângulo em direção ao abdômen, mantendo o tronco estável. Contraia as escápulas. Retorne alongando os braços.'
+    },
     'Remada Unilateral (Serrote)': {
-        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Apoie um joelho e a mão do mesmo lado em um banco. Mantenha o tronco paralelo ao chão e a coluna reta. Com o outro braço, puxe o halter em direção ao quadril/costela, mantendo o cotovelo próximo ao corpo. Desça controladamente.'
     },
+    'Remada com Halteres (Ambos os Braços)': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Incline o tronco à frente, joelhos levemente flexionados, halteres pendurados. Puxe ambos os halteres simultaneamente em direção ao abdômen/costelas, mantendo cotovelos próximos ao corpo.'
+    },
+    'Pullover com Halter': {
+        'grupo': 'Costas', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado em um banco (perpendicular ou ao longo), segure um halter com ambas as mãos acima do peito. Desça o halter em um arco sobre a cabeça mantendo leve flexão dos cotovelos. Puxe de volta contraindo dorsal e peito.'
+    },
+    'Pullover na Polia': {
+        'grupo': 'Costas', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé de frente para a polia alta, segure a barra com os braços estendidos acima da cabeça. Puxe a barra em um arco até a frente das coxas, mantendo os braços quase estendidos. Retorne controladamente.'
+    },
+    'Remada Cavalinho': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Coloque uma barra em um canto ou use máquina específica. Posicione-se sobre a barra, inclinado. Puxe a extremidade da barra em direção ao peito. Movimento similar à remada, mas com pegada única.'
+    },
+    'Levantamento Terra': {
+        'grupo': 'Costas', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Barra no chão. Pés sob a barra, na largura do quadril. Agache, segure a barra com pegada pronada. Mantenha coluna neutra, peito aberto. Levante estendendo quadril e joelhos simultaneamente. Trabalha toda a cadeia posterior.'
+    },
 
-    # Ombros
+    # ==================== OMBROS ====================
     'Desenvolvimento Militar com Barra': {
-        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Ombros'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Lombar', 'Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Em pé (ou sentado), barra apoiada na parte superior do peito, pegada pronada um pouco mais larga que os ombros. Empurre a barra verticalmente para cima até estender os cotovelos. Desça controladamente até a posição inicial.'
     },
     'Desenvolvimento com Halteres (sentado)': {
-        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Sentado em um banco com encosto, segure os halteres na altura dos ombros com as palmas para frente. Empurre os halteres verticalmente para cima. Desça controladamente.'
     },
+    'Desenvolvimento com Halteres (em pé)': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé, halteres na altura dos ombros. Empurre os halteres para cima. Exige maior estabilização do core comparado à versão sentada.'
+    },
+    'Desenvolvimento Arnold': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Sentado, inicie com halteres na frente dos ombros, palmas voltadas para você. Ao empurrar para cima, rode os punhos para que as palmas fiquem para frente no topo. Inverta o movimento na descida.'
+    },
+    'Desenvolvimento na Máquina': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado na máquina, ajuste a altura do banco. Empurre as manoplas para cima. Movimento guiado e seguro, ideal para iniciantes.'
+    },
     'Elevação Lateral': {
-        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé, segure halteres ao lado do corpo. Mantenha os cotovelos levemente flexionados. Eleve os braços lateralmente até a altura dos ombros. Desça controladamente.'
     },
+    'Elevação Lateral na Polia': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé de lado para a polia baixa, segure a manopla do lado oposto ao da polia. Eleve o braço lateralmente mantendo tensão constante. Desça controladamente.'
+    },
+    'Elevação Lateral Inclinado': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Incline o tronco lateralmente apoiando uma mão em um suporte. Com o braço livre, execute elevação lateral. Isola melhor o deltoide lateral removendo a ajuda do trapézio.'
+    },
     'Elevação Frontal': {
-        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé, segure halteres na frente das coxas (pegada pronada ou neutra). Eleve um braço de cada vez (ou ambos) para frente, mantendo o cotovelo levemente flexionado, até a altura dos ombros. Desça controladamente.'
     },
+    'Elevação Frontal com Barra': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé, segure a barra com pegada pronada na frente das coxas. Eleve a barra para frente até a altura dos ombros, mantendo os braços quase estendidos. Desça controladamente.'
+    },
+    'Remada Alta': {
+        'grupo': 'Ombros', 'tipo': 'Composto', 'equipamento': 'Barra/Halteres', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé, segure a barra com pegada pronada fechada (mãos próximas). Puxe a barra verticalmente ao longo do corpo até a altura do queixo, cotovelos apontando para cima e para fora. Desça controladamente.'
+    },
+    'Crucifixo Inverso com Halteres': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Incline o tronco para frente (sentado ou em pé curvado), halteres pendurados. Eleve os braços lateralmente em arco, cotovelos levemente flexionados, até a altura dos ombros. Foco no deltoide posterior.'
+    },
+    'Crucifixo Inverso na Máquina (Peck Deck Inverso)': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado de frente para a máquina peck deck (posição inversa), segure as manoplas. Abra os braços puxando para trás, focando no deltoide posterior. Retorne controladamente.'
+    },
+    'Face Pull': {
+        'grupo': 'Ombros', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Na polia alta com corda, segure as pontas da corda. Puxe em direção ao rosto, abrindo os cotovelos para fora. Foco no deltoide posterior e trapézio médio. Excelente para saúde dos ombros.'
+    },
 
-    # Bíceps
+    # ==================== BÍCEPS ====================
     'Rosca Direta com Barra': {
-        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': ['Punhos'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': ['Punhos'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé, segure a barra com pegada supinada (palmas para cima), mãos na largura dos ombros. Mantenha os cotovelos fixos ao lado do corpo. Flexione os cotovelos trazendo a barra em direção aos ombros. Desça controladamente.'
     },
+    'Rosca Direta com Barra W': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar à rosca com barra reta, mas usando barra W (zigzag). A pegada angulada reduz o estresse nos punhos e antebraços.'
+    },
     'Rosca Direta com Halteres': {
-        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé (ou sentado), segure halteres ao lado do corpo com pegada supinada. Mantenha os cotovelos fixos. Flexione os cotovelos, elevando os halteres. Pode ser feito simultaneamente ou alternadamente. Desça controladamente.'
     },
+    'Rosca Alternada': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé ou sentado, execute a rosca direta alternando os braços. Permite maior foco em cada braço individualmente e possibilita usar cargas ligeiramente maiores.'
+    },
     'Rosca Martelo': {
-        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé (ou sentado), segure halteres ao lado do corpo com pegada neutra (palmas voltadas para o corpo). Mantenha os cotovelos fixos. Flexione os cotovelos, elevando os halteres. Desça controladamente.'
     },
+    'Rosca Concentrada': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado, apoie a parte de trás do braço na parte interna da coxa. Segure um halter com pegada supinada. Flexione o cotovelo elevando o halter. Maior isolamento do bíceps.'
+    },
+    'Rosca Scott (Banco Scott)': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado no banco Scott, braços apoiados na almofada inclinada. Segure a barra com pegada supinada. Flexione os cotovelos. O apoio impede o balanço e isola melhor o bíceps.'
+    },
+    'Rosca na Polia Baixa': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé de frente para a polia baixa, segure a barra. Execute a rosca mantendo tensão constante durante todo o movimento. Permite bom trabalho na fase excêntrica.'
+    },
+    'Rosca 21': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Método de treinamento: 7 repetições da metade inferior (até 90°), 7 repetições da metade superior (de 90° até completo), 7 repetições completas. Total de 21 repetições contínuas. Alta intensidade.'
+    },
+    'Rosca Inversa': {
+        'grupo': 'Bíceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar à rosca direta, mas com pegada pronada (palmas para baixo). Trabalha mais intensamente os antebraços e braquiorradial, além do bíceps.'
+    },
 
-    # Tríceps
+    # ==================== TRÍCEPS ====================
     'Tríceps Testa': {
-        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': ['Cotovelos'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': ['Cotovelos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Deitado em um banco reto, segure uma barra W (ou halteres com pegada neutra) acima do peito com os braços estendidos. Mantenha os braços (úmeros) parados. Flexione os cotovelos descendo o peso em direção à testa/cabeça. Estenda os cotovelos de volta à posição inicial.'
     },
+    'Tríceps Francês (Testa com Halteres)': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': ['Cotovelos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado, segure halteres com pegada neutra (palmas frente a frente). Mantenha os cotovelos apontando para cima. Desça os halteres ao lado da cabeça flexionando apenas os cotovelos. Estenda.'
+    },
     'Tríceps Pulley': {
-        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Em pé, de frente para a polia alta, segure a barra ou corda com pegada pronada (ou neutra na corda). Mantenha os cotovelos fixos ao lado do corpo. Estenda completamente os cotovelos empurrando a barra/corda para baixo. Retorne controladamente.'
     },
+    'Tríceps Pulley com Corda': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar ao tríceps pulley, mas usando corda. Na parte final do movimento, separe as pontas da corda para os lados aumentando a contração do tríceps.'
+    },
+    'Tríceps Unilateral na Polia': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Um braço por vez na polia alta. Permite maior amplitude de movimento e foco em cada braço. Boa correção de assimetrias.'
+    },
+    'Tríceps Coice': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Incline o tronco para frente, joelho e mão de um lado apoiados em banco. Cotovelo do braço trabalhado fixo junto ao corpo, antebraço perpendicular ao chão. Estenda o cotovelo levando o halter para trás. Retorne controladamente.'
+    },
+    'Tríceps Overhead (Francês em Pé)': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Halteres/Barra', 'restricoes': ['Ombros', 'Cotovelos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé ou sentado, segure um halter (ou barra) acima da cabeça com ambas as mãos. Mantenha os cotovelos apontando para cima. Desça o peso atrás da cabeça flexionando apenas os cotovelos. Estenda de volta.'
+    },
+    'Tríceps na Polia Alta (Overhead)': {
+        'grupo': 'Tríceps', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'De costas para a polia alta, segure a corda acima da cabeça. Cotovelos apontando para frente. Estenda os cotovelos empurrando a corda para frente e para cima. Ênfase na cabeça longa do tríceps.'
+    },
     'Mergulho no Banco': {
-        'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Ombros', 'Punhos'], 'niveis_permitidos': ['Intermediário/Avançado'],
+        'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Ombros', 'Punhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
         'descricao': 'Apoie as mãos em um banco atrás do corpo, dedos para frente. Mantenha as pernas estendidas à frente (ou joelhos flexionados para facilitar). Flexione os cotovelos descendo o corpo verticalmente. Empurre de volta para cima estendendo os cotovelos.'
     },
+    'Mergulho nas Paralelas': {
+        'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': ['Ombros'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Apoie-se nas barras paralelas com os braços estendidos. Mantenha o corpo mais vertical para foco no tríceps (inclinado trabalha mais peito). Desça flexionando os cotovelos. Empurre para cima.'
+    },
+    'Supino Fechado': {
+        'grupo': 'Tríceps', 'tipo': 'Composto', 'equipamento': 'Barra', 'restricoes': ['Punhos'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado no banco, pegada na barra mais fechada que os ombros. Desça a barra em direção ao peito mantendo cotovelos próximos ao corpo. Empurre para cima. Trabalha tríceps e peito.'
+    },
 
-    # Core
+    # ==================== CORE ====================
     'Prancha': {
-        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Apoie os antebraços e as pontas dos pés no chão. Mantenha o corpo reto da cabeça aos calcanhares, contraindo o abdômen e os glúteos. Evite elevar ou baixar demais o quadril. Sustente a posição.'
     },
+    'Prancha Lateral': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de lado, apoie o antebraço e a lateral do pé. Eleve o quadril formando uma linha reta. Mantenha a posição contraindo o core e os oblíquos. Trabalha principalmente os músculos laterais do abdômen.'
+    },
+    'Prancha com Elevação de Perna': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Na posição de prancha, eleve alternadamente cada perna mantendo o quadril estável. Aumenta o desafio de estabilização.'
+    },
     'Abdominal Crunch': {
-        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado de costas, joelhos flexionados e pés no chão (ou pernas elevadas). Mãos atrás da cabeça (sem puxar) ou cruzadas no peito. Eleve a cabeça e os ombros do chão, contraindo o abdômen ("enrolando" a coluna). Retorne controladamente.'
     },
+    'Abdominal na Polia': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Ajoelhado de frente para a polia alta, segure a corda atrás da cabeça. Flexione o tronco para baixo contraindo o abdômen. Retorne controladamente. Permite progressão com carga.'
+    },
+    'Abdominal Bicicleta': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de costas, mãos atrás da cabeça, pernas elevadas. Leve o cotovelo em direção ao joelho oposto enquanto estende a outra perna. Alterne em movimento de pedalada. Trabalha reto abdominal e oblíquos.'
+    },
+    'Abdominal Infra (Reverso)': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de costas, pernas flexionadas ou estendidas. Eleve o quadril do chão trazendo os joelhos em direção ao peito. Foco no abdômen inferior. Desça controladamente.'
+    },
     'Elevação de Pernas': {
-        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'], # Iniciante com cuidado/adaptação
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado de costas, pernas estendidas. Pode colocar as mãos sob a lombar para apoio. Mantendo as pernas retas (ou levemente flexionadas), eleve-as até formarem 90° com o tronco. Desça controladamente quase até o chão, sem deixar a lombar arquear.'
-     },
+    },
+    'Elevação de Pernas Suspenso': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Pendurado em uma barra fixa, eleve as pernas estendidas (ou joelhos flexionados para facilitar) até formarem 90° com o tronco. Desça controladamente. Versão avançada e muito eficaz.'
+    },
+    'Russian Twist': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado com o tronco inclinado para trás, joelhos flexionados, pés elevados do chão. Segure um halter ou medicine ball. Rotacione o tronco alternando os lados, tocando o peso no chão ao lado do corpo. Trabalha oblíquos.'
+    },
+    'Prancha Dinâmica (Mountain Climber)': {
+        'grupo': 'Core', 'tipo': 'Composto', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Na posição de prancha alta (braços estendidos), traga alternadamente os joelhos em direção ao peito em movimento de corrida. Mantém o core ativado e adiciona componente cardiovascular.'
+    },
+    'Prancha com Toque no Ombro': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Na posição de prancha alta, alterne tocando o ombro oposto com cada mão. Mantém o quadril estável durante o movimento. Excelente para estabilização e anti-rotação.'
+    },
+    'Dead Bug': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Deitado de costas, braços estendidos para cima, joelhos flexionados a 90°. Desça simultaneamente um braço sobre a cabeça e a perna oposta estendida, mantendo a lombar colada no chão. Retorne e alterne. Excelente para coordenação e estabilidade.'
+    },
     'Superman': {
-        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'], 'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
         'descricao': 'Deitado de bruços, braços e pernas estendidos. Eleve simultaneamente braços, peito e pernas do chão, contraindo lombar e glúteos. Mantenha por um instante e retorne controladamente.'
-     },
+    },
+    'Bird Dog': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em quatro apoios. Estenda simultaneamente um braço para frente e a perna oposta para trás, formando uma linha reta. Mantenha o core estável. Retorne e alterne. Trabalha estabilização e equilíbrio.'
+    },
+    'Pallof Press': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Em pé de lado para a polia média, segure a manopla próxima ao peito. Estenda os braços para frente resistindo à rotação do tronco. Mantenha e retorne. Excelente exercício anti-rotação.'
+    },
+    'Abdominal Canivete (V-Up)': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado completamente estendido. Simultaneamente eleve pernas e tronco tentando tocar as mãos nos pés, formando um "V". Desça controladamente. Exercício avançado e intenso.'
+    },
+    'Roda Abdominal (Ab Wheel)': {
+        'grupo': 'Core', 'tipo': 'Composto', 'equipamento': 'Acessório', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Ajoelhado, segure a roda abdominal. Role para frente estendendo o corpo o máximo possível mantendo o core contraído. Puxe de volta contraindo o abdômen. Exercício muito desafiador.'
+    },
+    'Hollow Body Hold': {
+        'grupo': 'Core', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado de costas, eleve ligeiramente os ombros e pernas do chão (pernas estendidas), braços ao lado do corpo ou estendidos acima da cabeça. Lombar colada no chão. Mantenha a posição. Base do core em ginástica.'
+    },
+    'Windshield Wiper': {
+        'grupo': 'Core', 'tipo': 'Isolado', 'equipamento': 'Peso Corporal', 'restricoes': ['Lombar'],
+        'niveis_permitidos': ['Intermediário/Avançado'],
+        'descricao': 'Deitado de costas com pernas elevadas a 90°, braços abertos para os lados. Desça as pernas juntas para um lado (sem tocar o chão) e retorne ao centro. Alterne. Trabalha intensamente os oblíquos.'
+    },
+
+    # ==================== TRAPÉZIO ====================
+    'Encolhimento com Barra': {
+        'grupo': 'Trapézio', 'tipo': 'Isolado', 'equipamento': 'Barra', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé, segure a barra com pegada pronada, braços estendidos na frente do corpo. Eleve os ombros em direção às orelhas contraindo o trapézio. Desça controladamente. Não flexione os cotovelos.'
+    },
+    'Encolhimento com Halteres': {
+        'grupo': 'Trapézio', 'tipo': 'Isolado', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé, segure halteres ao lado do corpo, braços estendidos. Eleve os ombros em direção às orelhas. Desça controladamente. Permite maior amplitude de movimento que a barra.'
+    },
+    'Encolhimento na Máquina': {
+        'grupo': 'Trapézio', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Utilize máquina específica para encolhimento (trap bar ou smith machine). Execute o movimento vertical elevando os ombros. Trajetória estável e controlada.'
+    },
+    'Face Pull': {
+        'grupo': 'Trapézio', 'tipo': 'Isolado', 'equipamento': 'Máquina', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Na polia alta com corda, segure as pontas da corda. Puxe em direção ao rosto, abrindo os cotovelos para fora. Trabalha trapézio médio/inferior, deltoide posterior e manguito rotador.'
+    },
+
+    # ==================== ANTEBRAÇO ====================
+    'Rosca Punho (Wrist Curl)': {
+        'grupo': 'Antebraço', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Sentado, antebraços apoiados nas coxas ou em um banco, punhos para fora da borda. Segure a barra/halteres com pegada supinada. Flexione os punhos para cima. Trabalha flexores do antebraço.'
+    },
+    'Rosca Punho Inversa': {
+        'grupo': 'Antebraço', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Similar à rosca de punho, mas com pegada pronada (palmas para baixo). Estenda os punhos para cima. Trabalha extensores do antebraço.'
+    },
+    'Farmer Walk (Caminhada do Fazendeiro)': {
+        'grupo': 'Antebraço', 'tipo': 'Composto', 'equipamento': 'Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Segure halteres pesados ao lado do corpo. Caminhe mantendo postura ereta e ombros para trás. Trabalha intensamente a pegada, antebraços, trapézio e core. Excelente para força funcional.'
+    },
+    'Dead Hang (Suspensão na Barra)': {
+        'grupo': 'Antebraço', 'tipo': 'Isométrico', 'equipamento': 'Peso Corporal', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Pendure-se em uma barra com pegada pronada, braços estendidos. Mantenha a suspensão o máximo de tempo possível. Desenvolve força de pegada e alonga os ombros.'
+    },
+    'Rosca Inversa': {
+        'grupo': 'Antebraço', 'tipo': 'Isolado', 'equipamento': 'Barra/Halteres', 'restricoes': [],
+        'niveis_permitidos': ['Iniciante', 'Intermediário/Avançado'],
+        'descricao': 'Em pé, segure a barra com pegada pronada. Execute uma rosca direta mantendo as palmas para baixo. Trabalha intensamente braquiorradial e extensores do antebraço.'
+    },
 }
 
 EXERCISE_SUBSTITUTIONS = {
     # Substituições PRINCIPALMENTE por RESTRIÇÃO
-    'Agachamento com Barra': 'Leg Press 45°', # Lombar, Joelhos -> Máquina
-    'Stiff com Halteres': 'Mesa Flexora', # Lombar -> Máquina Isolado
-    'Remada Curvada com Barra': 'Remada Sentada (máquina)', # Lombar -> Máquina
-    'Desenvolvimento Militar com Barra': 'Desenvolvimento com Halteres (sentado)', # Lombar, Ombros -> Halteres Sentado
-    'Supino Reto com Barra': 'Supino Reto com Halteres', # Ombros -> Halteres (maior liberdade)
-    'Tríceps Testa': 'Tríceps Pulley', # Cotovelos -> Máquina
-    'Rosca Direta com Barra': 'Rosca Direta com Halteres', # Punhos -> Halteres
-    'Flexão de Braço': 'Supino Reto com Halteres', # Punhos -> Halteres (menos carga direta no punho)
-    'Elevação de Pernas': 'Prancha', # Lombar -> Isométrico seguro
-    'Superman': 'Prancha', # Lombar -> Isométrico seguro
+    'Agachamento com Barra': 'Leg Press 45°',
+    'Agachamento Frontal': 'Hack Squat',
+    'Stiff com Halteres': 'Mesa Flexora',
+    'Stiff com Barra': 'Mesa Flexora',
+    'Levantamento Terra Romeno': 'Mesa Flexora',
+    'Levantamento Terra': 'Leg Press 45°',
+    'Good Morning': 'Mesa Flexora',
+    'Remada Curvada com Barra': 'Remada Sentada (máquina)',
+    'Remada Curvada Supinada': 'Remada na Polia Baixa',
+    'Remada com Halteres (Ambos os Braços)': 'Remada Sentada (máquina)',
+    'Remada Cavalinho': 'Remada Sentada (máquina)',
+    'Desenvolvimento Militar com Barra': 'Desenvolvimento com Halteres (sentado)',
+    'Desenvolvimento com Halteres (em pé)': 'Desenvolvimento com Halteres (sentado)',
+    'Remada Alta': 'Elevação Lateral',
+    'Supino Reto com Barra': 'Supino Reto com Halteres',
+    'Supino Inclinado com Barra': 'Supino Inclinado com Halteres',
+    'Supino Declinado': 'Supino Reto com Halteres',
+    'Pullover com Halter': 'Pullover na Polia',
+    'Tríceps Testa': 'Tríceps Pulley',
+    'Tríceps Francês (Testa com Halteres)': 'Tríceps Pulley',
+    'Tríceps Overhead (Francês em Pé)': 'Tríceps Pulley',
+    'Supino Fechado': 'Tríceps Pulley',
+    'Rosca Direta com Barra': 'Rosca Direta com Halteres',
+    'Flexão de Braço': 'Supino Reto com Halteres',
+    'Flexão Declinada': 'Supino Inclinado com Halteres',
+    'Flexão Inclinada': 'Supino Reto com Halteres',
+    'Elevação de Pernas': 'Prancha',
+    'Elevação de Pernas Suspenso': 'Abdominal Infra (Reverso)',
+    'Superman': 'Prancha',
+    'Abdominal Canivete (V-Up)': 'Abdominal Crunch',
+    'Roda Abdominal (Ab Wheel)': 'Prancha',
+    'Hollow Body Hold': 'Prancha',
+    'Windshield Wiper': 'Russian Twist',
+    'Extensão de Quadril (Coice)': 'Coice na Polia (Cabo)',
 
     # Substituições PRINCIPALMENTE por NÍVEL (Iniciante não pode fazer)
-    'Barra Fixa': 'Puxada Alta (Lat Pulldown)', # Difícil -> Máquina
-    'Mergulho no Banco': 'Tríceps Pulley', # Difícil/Ombros -> Máquina
+    'Barra Fixa': 'Puxada Alta (Lat Pulldown)',
+    'Barra Fixa Supinada': 'Puxada Frontal com Pegada Fechada',
+    'Mergulho no Banco': 'Tríceps Pulley',
+    'Mergulho nas Paralelas': 'Tríceps Pulley',
+    'Agachamento Búlgaro': 'Afundo Estacionário',
+    'Sissy Squat': 'Cadeira Extensora',
+    'Hack Squat': 'Leg Press 45°',
+    'Rosca 21': 'Rosca Direta com Halteres',
+    'Prancha com Elevação de Perna': 'Prancha',
+    'Prancha com Toque no Ombro': 'Prancha',
+    'Mountain Climber': 'Prancha',
+    'Desenvolvimento Arnold': 'Desenvolvimento com Halteres (sentado)',
+    'Elevação Lateral Inclinado': 'Elevação Lateral',
+    'Pallof Press': 'Prancha Lateral',
+
+    # Substituições por EQUIPAMENTO não disponível
+    'Hip Thrust Unilateral': 'Elevação Pélvica',
+    'Step Up': 'Afundo (Passada)',
+    'Panturrilha em Pé (Máquina)': 'Panturrilha no Leg Press',
+    'Panturrilha Sentado (Máquina)': 'Panturrilha no Leg Press',
+    'Peck Deck (Voador)': 'Crucifixo com Halteres',
+    'Crucifixo na Polia (Cross Over)': 'Crucifixo com Halteres',
+    'Crucifixo Inclinado': 'Crucifixo com Halteres',
+    'Supino na Máquina': 'Supino Reto com Halteres',
+    'Pullover na Polia': 'Pullover com Halter',
+    'Puxada com Triângulo': 'Puxada Alta (Lat Pulldown)',
+    'Puxada Frontal com Pegada Fechada': 'Puxada Alta (Lat Pulldown)',
+    'Remada na Polia Baixa': 'Remada Sentada (máquina)',
+    'Desenvolvimento na Máquina': 'Desenvolvimento com Halteres (sentado)',
+    'Elevação Lateral na Polia': 'Elevação Lateral',
+    'Crucifixo Inverso na Máquina (Peck Deck Inverso)': 'Crucifixo Inverso com Halteres',
+    'Rosca Scott (Banco Scott)': 'Rosca Concentrada',
+    'Rosca na Polia Baixa': 'Rosca Direta com Halteres',
+    'Tríceps Pulley com Corda': 'Tríceps Pulley',
+    'Tríceps Unilateral na Polia': 'Tríceps Pulley',
+    'Tríceps na Polia Alta (Overhead)': 'Tríceps Overhead (Francês em Pé)',
+    'Abdominal na Polia': 'Abdominal Crunch',
+    'Coice na Polia (Cabo)': 'Extensão de Quadril (Coice)',
+    'Mesa Flexora Sentada': 'Mesa Flexora',
+    'Encolhimento na Máquina': 'Encolhimento com Halteres',
 }
+
+# Grupos de exercícios por categoria (útil para busca e organização)
+GRUPOS_MUSCULARES = {
+    'Pernas': ['Quadríceps', 'Isquiotibiais', 'Glúteos', 'Panturrilhas', 'Adutores'],
+    'Superior': ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Trapézio', 'Antebraço'],
+    'Core': ['Abdômen', 'Lombar', 'Oblíquos']
+}
+
+# Dificuldade dos exercícios (para progressão)
+NIVEL_DIFICULDADE = {
+    'Iniciante': [
+        'Leg Press 45°', 'Cadeira Extensora', 'Mesa Flexora', 'Mesa Flexora Sentada',
+        'Elevação Pélvica', 'Abdução de Quadril', 'Glúteo Sapinho (Frog Pump)',
+        'Panturrilha no Leg Press', 'Agachamento com Halteres', 'Agachamento Goblet',
+        'Afundo (Passada)', 'Afundo Estacionário', 'Panturrilha com Halteres',
+        'Supino Reto com Halteres', 'Supino Inclinado com Halteres', 'Crucifixo com Halteres',
+        'Flexão Inclinada', 'Flexão de Braço', 'Peck Deck (Voador)', 'Supino na Máquina',
+        'Puxada Alta (Lat Pulldown)', 'Remada Sentada (máquina)', 'Remada Unilateral (Serrote)',
+        'Remada na Polia Baixa', 'Pullover na Polia',
+        'Desenvolvimento com Halteres (sentado)', 'Elevação Lateral', 'Elevação Frontal',
+        'Desenvolvimento na Máquina', 'Crucifixo Inverso com Halteres', 'Face Pull',
+        'Rosca Direta com Halteres', 'Rosca Alternada', 'Rosca Martelo', 'Rosca Concentrada',
+        'Rosca Scott (Banco Scott)', 'Rosca na Polia Baixa',
+        'Tríceps Pulley', 'Tríceps Pulley com Corda', 'Tríceps Coice', 'Tríceps Unilateral na Polia',
+        'Prancha', 'Prancha Lateral', 'Abdominal Crunch', 'Abdominal Infra (Reverso)',
+        'Abdominal Bicicleta', 'Russian Twist', 'Dead Bug', 'Bird Dog',
+        'Encolhimento com Halteres', 'Encolhimento com Barra',
+        'Rosca Punho (Wrist Curl)', 'Dead Hang (Suspensão na Barra)'
+    ],
+    'Intermediário/Avançado': [
+        'Agachamento com Barra', 'Agachamento Frontal', 'Agachamento Búlgaro', 'Hack Squat',
+        'Sissy Squat', 'Stiff com Halteres', 'Stiff com Barra', 'Levantamento Terra Romeno',
+        'Levantamento Terra', 'Good Morning', 'Hip Thrust Unilateral', 'Step Up',
+        'Extensão de Quadril (Coice)', 'Coice na Polia (Cabo)', 'Abdução Deitado de Lado',
+        'Supino Reto com Barra', 'Supino Inclinado com Barra', 'Supino Declinado',
+        'Crucifixo Inclinado', 'Crucifixo na Polia (Cross Over)', 'Flexão Declinada',
+        'Pullover com Halter',
+        'Barra Fixa', 'Barra Fixa Supinada', 'Remada Curvada com Barra', 'Remada Curvada Supinada',
+        'Remada com Halteres (Ambos os Braços)', 'Remada Cavalinho',
+        'Desenvolvimento Militar com Barra', 'Desenvolvimento com Halteres (em pé)',
+        'Desenvolvimento Arnold', 'Remada Alta', 'Elevação Lateral Inclinado',
+        'Elevação Lateral na Polia', 'Elevação Frontal com Barra',
+        'Crucifixo Inverso na Máquina (Peck Deck Inverso)',
+        'Rosca Direta com Barra', 'Rosca Direta com Barra W', 'Rosca 21', 'Rosca Inversa',
+        'Tríceps Testa', 'Tríceps Francês (Testa com Halteres)', 'Tríceps Overhead (Francês em Pé)',
+        'Tríceps na Polia Alta (Overhead)', 'Mergulho no Banco', 'Mergulho nas Paralelas',
+        'Supino Fechado',
+        'Prancha com Elevação de Perna', 'Prancha com Toque no Ombro', 'Elevação de Pernas',
+        'Elevação de Pernas Suspenso', 'Prancha Dinâmica (Mountain Climber)', 'Superman',
+        'Pallof Press', 'Abdominal Canivete (V-Up)', 'Roda Abdominal (Ab Wheel)',
+        'Hollow Body Hold', 'Windshield Wiper', 'Abdominal na Polia',
+        'Encolhimento na Máquina', 'Farmer Walk (Caminhada do Fazendeiro)',
+        'Rosca Punho Inversa'
+    ]
+
+}
+WARMUP_ROUTINE = [
+    {"nome": "Polichinelos", "duracao_s": 60, "descricao": "Movimento de saltar abrindo e fechando pernas e braços simultaneamente."},
+    {"nome": "Corrida Estacionária (Joelho Alto)", "duracao_s": 60, "descricao": "Simule uma corrida no lugar, elevando bem os joelhos."},
+    {"nome": "Rotação de Tronco", "duracao_s": 45, "descricao": "Em pé, gire o tronco suavemente para os lados, mantendo o quadril estável."},
+    {"nome": "Círculos com os Braços (Para Frente)", "duracao_s": 30, "descricao": "Gire os braços estendidos para frente em círculos amplos."},
+    {"nome": "Círculos com os Braços (Para Trás)", "duracao_s": 30, "descricao": "Gire os braços estendidos para trás em círculos amplos."},
+    {"nome": "Agachamento sem Peso (Mobilidade)", "duracao_s": 60, "descricao": "Agache o mais fundo possível com boa forma, focando na mobilidade do quadril e tornozelo."},
+    {"nome": "Alongamento Dinâmico de Isquiotibiais (Perna Reta)", "duracao_s": 45, "descricao": "Em pé, balance uma perna reta para frente e para trás controladamente."},
+]
+
+COOLDOWN_ROUTINE = [
+    {"nome": "Alongamento Quadríceps (Em pé)", "duracao_s": 30, "descricao": "Segure o pé atrás, puxe o calcanhar em direção ao glúteo, mantendo joelhos juntos."},
+    {"nome": "Alongamento Posterior Coxa (Sentado ou em pé)", "duracao_s": 30, "descricao": "Tente alcançar a ponta dos pés com as pernas estendidas, alongando a parte de trás das coxas."},
+    {"nome": "Alongamento Glúteos (Figura 4 Deitado)", "duracao_s": 30, "descricao": "Deitado, cruze um tornozelo sobre o joelho oposto e puxe a coxa de baixo em direção ao peito."},
+    {"nome": "Alongamento Peitoral (No batente da porta)", "duracao_s": 30, "descricao": "Apoie o antebraço no batente e gire o corpo suavemente para o lado oposto."},
+    {"nome": "Alongamento Dorsal/Latíssimo (Ajoelhado)", "duracao_s": 30, "descricao": "Ajoelhe-se e estenda os braços à frente no chão, 'afundando' o peito em direção ao solo."},
+    {"nome": "Alongamento Tríceps (Atrás da cabeça)", "duracao_s": 30, "descricao": "Leve um cotovelo acima e atrás da cabeça, puxe-o suavemente com a outra mão."},
+    {"nome": "Alongamento Bíceps/Antebraço", "duracao_s": 30, "descricao": "Estenda um braço à frente com a palma para cima, puxe os dedos para baixo com a outra mão."},
+]
 
 
 # ---------------------------
@@ -598,52 +1231,26 @@ def salvar_dados_usuario_firebase(uid: str):
 
 
 def carregar_dados_usuario_firebase(uid: str):
-    if not uid:
-        return
+    if not uid: return
     try:
-        with st.spinner("🔁 Carregando dados do Firestore..."):
+        with st.spinner("🔁 Carregando dados..."):
             doc = db.collection('usuarios').document(uid).get()
             time.sleep(0.2)
-        if not doc.exists:
-            st.warning("Documento do usuário não encontrado no Firestore.")
-            return
+        if not doc.exists: return
         data = doc.to_dict()
         st.session_state['dados_usuario'] = data.get('dados_usuario')
         st.session_state['plano_treino'] = serial_to_plan(data.get('plano_treino'))
-        freq = []
-        for d in data.get('frequencia', []):
-            if isinstance(d, datetime):
-                freq.append(d.date())
-            elif isinstance(d, str):
-                try:
-                    freq.append(date.fromisoformat(d))
-                except:
-                    try:
-                        freq.append(datetime.fromisoformat(d).date())
-                    except:
-                        pass
-            else:
-                freq.append(d)
-        st.session_state['frequencia'] = freq
-        hist = data.get('historico_treinos', [])
-        for t in hist:
-            if 'data' in t and isinstance(t['data'], datetime):
-                t['data'] = t['data'].date()
-            elif 'data' in t and isinstance(t['data'], str):
-                try:
-                    t['data'] = date.fromisoformat(t['data'])
-                except:
-                    pass
-        st.session_state['historico_treinos'] = hist
+        st.session_state['frequencia'] = [d.date() if isinstance(d, datetime) else d for d in data.get('frequencia', [])]
+        st.session_state['historico_treinos'] = data.get('historico_treinos', [])
         st.session_state['fotos_progresso'] = data.get('fotos_progresso', [])
         st.session_state['medidas'] = data.get('medidas', [])
         st.session_state['feedbacks'] = data.get('feedbacks', [])
         st.session_state['metas'] = data.get('metas', [])
-        st.session_state['role'] = data.get('role')
+        st.session_state['role'] = data.get('role', 'free') # <-- Carrega o role, default 'free' se não existir
         st.session_state['settings'] = data.get('settings', st.session_state.get('settings', {}))
+        st.session_state['ciclo_atual'] = data.get('ciclo_atual') # Carrega ciclo atual também
     except Exception as e:
-        st.error("Erro ao carregar do Firestore:")
-        st.error(str(e))
+        st.error(f"Erro ao carregar: {e}")
 
 
 # ---------------------------
@@ -790,13 +1397,14 @@ def criar_usuario_firebase(email: str, senha: str, nome: str) -> (bool, str):
             'email': email, 'username': nome, 'dados_usuario': {'nome': nome},
             'plano_treino': None, 'frequencia': [], 'historico_treinos': [],
             'historico_peso': [], 'metas': [], 'fotos_progresso': [], 'medidas': [],
-            'feedbacks': [], 'ciclo_atual': None, 'role': None, 'password_hash': sha256(senha),
+            'feedbacks': [], 'ciclo_atual': None,
+            'role': 'free', # <-- Garante que está definido como 'free'
+            'password_hash': sha256(senha),
             'data_criacao': datetime.now()
         })
         return True, "Usuário criado com sucesso!"
     except Exception as e:
         return False, f"Erro ao criar usuário: {e}"
-
 
 def verificar_credenciais_firebase(username_or_email: str, senha: str) -> (bool, str):
     if username_or_email == 'demo' and senha == 'demo123':
@@ -892,6 +1500,10 @@ def check_notifications_on_open():
 def show_logo_center():
     st.markdown("<div style='text-align:center;'><h1>🏋️ FitPro</h1><p>Seu Personal Trainer Digital</p></div>",
                 unsafe_allow_html=True)
+# [NOVA] Função de callback para navegação (necessária para os botões VIP)
+def navigate_to_page(page_name):
+    """Atualiza o session_state para mudar a página no próximo rerun."""
+    st.session_state['selected_page'] = page_name
 
 
 def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
@@ -921,66 +1533,40 @@ def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
 
 
 def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None) -> Dict:
-    # Pega os dados do usuário, incluindo o nível
-    nivel_usuario = dados_usuario.get('nivel', 'Iniciante')
+    nivel = dados_usuario.get('nivel', 'Iniciante')
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
     sexo = dados_usuario.get('sexo', 'Masculino')
 
-    # Define séries/reps/descanso base
-    if fase_atual:
-        series_base, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
+    if fase_atual: series_base_str, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
     else:
-        if objetivo == 'Hipertrofia':
-            series_base, reps_base, descanso_base = '3-4', '8-12', '60-90s'
-        elif objetivo == 'Emagrecimento':
-            series_base, reps_base, descanso_base = '3', '12-15', '45-60s'
-        else:
-            series_base, reps_base, descanso_base = '3', '15-20', '30-45s'
+        if objetivo == 'Hipertrofia': series_base_str, reps_base, descanso_base = ('3-4' if nivel != 'Iniciante' else '3'), '8-12', '60-90s'
+        elif objetivo == 'Emagrecimento': series_base_str, reps_base, descanso_base = '3', '12-15', '45-60s'
+        else: series_base_str, reps_base, descanso_base = '3', '15-20', '30-45s'
 
-    # Função selecionar_exercicios agora filtra por niveis_permitidos
-    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[
-        Dict]:
+    series_parts = series_base_str.split('-'); series_final = series_parts[0] if nivel == 'Iniciante' else series_parts[-1]
+    if not series_final.isdigit(): series_final = '3'
+
+    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[Dict]:
         exercicios_selecionados = []
         candidatos_validos = []
-
-        exercicios_considerados = list(EXERCICIOS_DB.items())
-        random.shuffle(exercicios_considerados)  # Embaralha para variar a seleção inicial
-
-        for ex_nome, ex_data in exercicios_considerados:
+        for ex_nome, ex_data in EXERCICIOS_DB.items():
+            niveis_permitidos = ex_data.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
+            if nivel not in niveis_permitidos: continue
             if ex_data.get('grupo') in grupos and ex_nome not in excluir:
-
-                # --- FILTRO DE NÍVEL (usando niveis_permitidos) ---
-                niveis_permitidos = ex_data.get('niveis_permitidos', ['Iniciante',
-                                                                      'Intermediário/Avançado'])  # Assume todos se não especificado
-                # PULA se o nível do usuário NÃO ESTÁ na lista de níveis permitidos do exercício
-                if nivel_usuario not in niveis_permitidos:
-                    continue
-                # --- FIM DO FILTRO DE NÍVEL ---
-
-                # Lógica de restrição
                 exercicio_tem_restricao = any(r in ex_data.get('restricoes', []) for r in restricoes_usr)
                 if exercicio_tem_restricao:
                     substituto = EXERCISE_SUBSTITUTIONS.get(ex_nome)
                     if substituto and substituto not in excluir:
                         sub_details = EXERCICIOS_DB.get(substituto, {})
-                        sub_niveis = sub_details.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
+                        sub_niveis_permitidos = sub_details.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
+                        if nivel in sub_niveis_permitidos and substituto not in candidatos_validos and not any(r in sub_details.get('restricoes', []) for r in restricoes_usr):
+                            candidatos_validos.append(substituto)
+                elif nivel in niveis_permitidos and ex_nome not in candidatos_validos:
+                    candidatos_validos.append(ex_nome)
 
-                        # Verifica se o SUBSTITUTO é adequado para o nível E não tem restrição
-                        if nivel_usuario not in sub_niveis:
-                            continue  # Substituto não é para este nível
-                        elif substituto not in candidatos_validos and not any(
-                                r in sub_details.get('restricoes', []) for r in restricoes_usr):
-                            candidatos_validos.append(substituto)  # Adiciona substituto válido
-
-                # Se o exercício original passou no filtro de nível E não tem restrição
-                elif ex_nome not in candidatos_validos:
-                    candidatos_validos.append(ex_nome)  # Adiciona original válido
-
-        # Lógica de seleção (com fallback)
-        # candidatos = list(set(candidatos_validos)) # Set já não é necessário se a lógica acima estiver correta
-        candidatos = candidatos_validos  # Já deve ter apenas válidos e únicos
+        candidatos = list(set(candidatos_validos)); random.shuffle(candidatos)
         compostos_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto']
         isolados_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto']
         compostos_finais = compostos_selecionados[:n_compostos]
@@ -990,91 +1576,84 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
         if len(exercicios_finais) < total_desejado:
             faltantes = total_desejado - len(exercicios_finais)
             if len(isolados_finais) < n_isolados and len(compostos_selecionados) > len(compostos_finais):
-                extras = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes]
-                exercicios_finais.extend(extras);
-                faltantes -= len(extras)
-            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(
-                    isolados_finais):
-                extras = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes]
-                exercicios_finais.extend(extras)
-
+                 extras_c = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes]; exercicios_finais.extend(extras_c); faltantes -= len(extras_c)
+            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(isolados_finais):
+                 extras_i = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes]; exercicios_finais.extend(extras_i)
+        exercicios_finais = exercicios_finais[:total_desejado]
         for ex in exercicios_finais:
-            # Usa .split('-')[0] para pegar o menor número de séries (melhor para iniciantes)
-            num_series = series_base.split('-')[0]
-            exercicios_selecionados.append(
-                {'Exercício': ex, 'Séries': num_series, 'Repetições': reps_base, 'Descanso': descanso_base})
-        return exercicios_selecionados
+             exercicios_selecionados.append({'Exercício': ex, 'Séries': series_final, 'Repetições': reps_base, 'Descanso': descanso_base})
+        return exercicios_selecionados if exercicios_finais else []
 
-    # Lógica de divisão do plano (permanece a mesma)
     plano = {}
-    if dias <= 2:
-        plano['Treino A: Corpo Inteiro'] = selecionar_exercicios(['Peito', 'Costas', 'Pernas', 'Ombros'], 3, 1)
-        plano['Treino B: Corpo Inteiro'] = selecionar_exercicios(['Pernas', 'Costas', 'Peito', 'Bíceps', 'Tríceps'], 3,
-                                                                 2)
-    elif dias == 3:
-        if sexo == 'Feminino':
-            plano['Treino A: Superiores'] = selecionar_exercicios(['Peito', 'Costas', 'Ombros'], 2, 2)
-            plano['Treino B: Inferiores (Foco Quad/Glúteo)'] = selecionar_exercicios(['Pernas'], 2, 3)
-            plano['Treino C: Inferiores (Foco Post/Glúteo)'] = selecionar_exercicios(['Pernas'], 2, 3,
-                                                                                     excluir=[ex['Exercício'] for ex in
-                                                                                              plano[
-                                                                                                  'Treino B: Inferiores (Foco Quad/Glúteo)']])
-        else:
-            plano['Treino A: Superiores (Push)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 2, 3)
-            plano['Treino B: Inferiores'] = selecionar_exercicios(['Pernas'], 2, 3)
-            plano['Treino C: Superiores (Pull)'] = selecionar_exercicios(['Costas', 'Bíceps'], 2, 2)
-    elif dias == 4:
-        if sexo == 'Feminino':
-            upper_a_ex = selecionar_exercicios(['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps'], 3, 2)
-            lower_a_ex = selecionar_exercicios(['Pernas'], 3, 2)
-            plano['Treino A: Superiores A'] = upper_a_ex
-            plano['Treino B: Inferiores A'] = lower_a_ex
-            plano['Treino C: Superiores B'] = selecionar_exercicios(['Costas', 'Peito', 'Ombros', 'Bíceps', 'Tríceps'],
-                                                                    3, 2,
-                                                                    excluir=[ex['Exercício'] for ex in upper_a_ex])
-            plano['Treino D: Inferiores B'] = selecionar_exercicios(['Pernas'], 2, 3,
-                                                                    excluir=[ex['Exercício'] for ex in lower_a_ex])
-        else:
-            plano['Treino A: Superiores (Foco Peito/Costas)'] = selecionar_exercicios(['Peito', 'Costas', 'Bíceps'], 3,
-                                                                                      2)
-            plano['Treino B: Inferiores (Foco Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
-            plano['Treino C: Superiores (Foco Ombros/Braços)'] = selecionar_exercicios(['Ombros', 'Tríceps', 'Bíceps'],
-                                                                                       2, 3)
-            plano['Treino D: Inferiores (Foco Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3)
-    elif dias >= 5:
-        if nivel_usuario == 'Iniciante':
-            upper_a_ex = selecionar_exercicios(['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps'], 2, 2)
-            lower_a_ex = selecionar_exercicios(['Pernas'], 2, 2)
-            upper_b_ex = selecionar_exercicios(['Costas', 'Peito', 'Ombros', 'Bíceps', 'Tríceps'], 2, 2,
-                                               excluir=[ex['Exercício'] for ex in upper_a_ex])
-            lower_b_ex = selecionar_exercicios(['Pernas'], 2, 2, excluir=[ex['Exercício'] for ex in lower_a_ex])
-            plano['Dia 1: Superiores A'] = upper_a_ex
-            plano['Dia 2: Inferiores A'] = lower_a_ex
-            plano['Dia 3: Superiores B'] = upper_b_ex
-            plano['Dia 4: Inferiores B'] = lower_b_ex
-            plano['Dia 5: Superiores A'] = upper_a_ex
-        else:  # Intermediário/Avançado
-            if sexo == 'Feminino':
-                plano['Treino A: Inferiores (Quadríceps)'] = selecionar_exercicios(['Pernas'], 2, 3)
-                plano['Treino B: Superiores (Push)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 2, 2)
-                plano['Treino C: Inferiores (Posterior/Glúteos)'] = selecionar_exercicios(['Pernas'], 2, 3)
-                plano['Treino D: Superiores (Pull)'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 1)
-                plano['Treino E: Glúteos & Core'] = selecionar_exercicios(['Pernas', 'Core'], 1, 3)
-                lista_c = plano['Treino C: Inferiores (Posterior/Glúteos)']
-                lista_e = plano['Treino E: Glúteos & Core']
-                if 'Elevação Pélvica' not in [ex['Exercício'] for ex in lista_c + lista_e]:
-                    if len(lista_c) < 6:
-                        lista_c.append({'Exercício': 'Elevação Pélvica', 'Séries': series_base.split('-')[0],
-                                        'Repetições': reps_base, 'Descanso': descanso_base})
-                    elif len(lista_e) < 5:
-                        lista_e.append({'Exercício': 'Elevação Pélvica', 'Séries': series_base.split('-')[0],
-                                        'Repetições': reps_base, 'Descanso': descanso_base})
-            else:  # Masculino Intermediário/Avançado
-                plano['Treino A: Peito'] = selecionar_exercicios(['Peito'], 2, 2)
-                plano['Treino B: Costas'] = selecionar_exercicios(['Costas'], 4, 0)
-                plano['Treino C: Pernas'] = selecionar_exercicios(['Pernas'], 2, 3)
-                plano['Treino D: Ombros'] = selecionar_exercicios(['Ombros'], 2, 2)
-                plano['Treino E: Braços & Core'] = selecionar_exercicios(['Bíceps', 'Tríceps', 'Core'], 0, 4)
+    grupos_todos = ['Pernas', 'Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Core', 'Trapézio', 'Antebraço']
+    grupos_superiores = ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Trapézio', 'Antebraço']
+    grupos_inferiores = ['Pernas', 'Core']
+    grupos_push = ['Peito', 'Ombros', 'Tríceps']
+    grupos_pull = ['Costas', 'Bíceps', 'Trapézio', 'Antebraço']
+    grupos_legs = ['Pernas']
+
+    if nivel == 'Iniciante':
+        if dias == 1: plano['Treino: Full Body'] = selecionar_exercicios(grupos_todos, 3, 3) # Target: 6
+        elif dias == 2:
+            plano['Treino A: Superiores'] = selecionar_exercicios(grupos_superiores, 2, 3) # Target: 5
+            plano['Treino B: Inferiores'] = selecionar_exercicios(grupos_inferiores, 2, 2) # Target: 4
+        elif dias == 3:
+            fb1 = selecionar_exercicios(grupos_todos, 3, 2) # Target: 5
+            fb2 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1])
+            fb3 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1 + fb2])
+            plano['Dia 1: Full Body A'] = fb1; plano['Dia 2: Full Body B'] = fb2 if fb2 else fb1; plano['Dia 3: Full Body C'] = fb3 if fb3 else fb2 if fb2 else fb1
+        elif dias == 4:
+            plano['Treino A (Push+Core)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps', 'Core'], 3, 2) # Target: 5
+            plano['Treino B (Pull+Legs)'] = selecionar_exercicios(['Costas', 'Bíceps', 'Pernas'], 3, 2) # Target: 5
+        elif dias == 5:
+            # --- AJUSTE AQUI para 5 exercícios ---
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            upper_b = selecionar_exercicios(grupos_superiores, 3, 2, excluir=[ex['Exercício'] for ex in upper_a]) # Target: 5
+            lower_b = selecionar_exercicios(grupos_inferiores, 3, 2, excluir=[ex['Exercício'] for ex in lower_a]) # Target: 5
+            plano['Dia 1: Superiores A'] = upper_a; plano['Dia 2: Inferiores A'] = lower_a
+            plano['Dia 3: Superiores B'] = upper_b; plano['Dia 4: Inferiores B'] = lower_b
+            plano['Dia 5: Superiores A'] = upper_a
+        elif dias >= 6:
+            # --- AJUSTE AQUI para 5 exercícios ---
+            abc_a = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            abc_b = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            abc_c = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            plano['Dia 1: Peito/Tríceps A'] = abc_a; plano['Dia 2: Costas/Bíceps A'] = abc_b; plano['Dia 3: Pernas/Ombros A'] = abc_c
+            plano['Dia 4: Peito/Tríceps B'] = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_a]) or abc_a # Target: 5
+            plano['Dia 5: Costas/Bíceps B'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_b]) or abc_b # Target: 5
+            plano['Dia 6: Pernas/Ombros B'] = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2, excluir=[ex['Exercício'] for ex in abc_c]) or abc_c # Target: 5
+
+    else: # Intermediário/Avançado
+        if dias == 1: plano['Treino: Full Body Intenso'] = selecionar_exercicios(grupos_todos, 4, 1) # Target: 5
+        elif dias == 2:
+            plano['Treino A: Full Body Foco Força'] = selecionar_exercicios(grupos_todos, 4, 1) # Target: 5
+            plano['Treino B: Full Body Foco Volume'] = selecionar_exercicios(grupos_todos, 2, 3) # Target: 5
+        elif dias == 3:
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2) # Target: 5
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2) # Target: 5
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs + ['Core'], 3, 2) # Target: 5
+        elif dias == 4:
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2) # Target: 5
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2) # Target: 5
+            plano['Dia 1: Upper Força'] = upper_a; plano['Dia 2: Lower Força'] = lower_a
+            plano['Dia 3: Upper Volume'] = selecionar_exercicios(grupos_superiores, 2, 3, excluir=[ex['Exercício'] for ex in upper_a]) # Target: 5
+            plano['Dia 4: Lower Volume'] = selecionar_exercicios(grupos_inferiores, 2, 3, excluir=[ex['Exercício'] for ex in lower_a]) # Target: 5
+        elif dias == 5:
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2) # Target: 5
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2) # Target: 5
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs, 3, 2) # Target: 5
+            plano['Dia 4: Upper Leve'] = selecionar_exercicios(grupos_superiores, 2, 3) # Target: 5
+            # --- AJUSTE AQUI para 5 exercícios ---
+            plano['Dia 5: Lower/Core Leve'] = selecionar_exercicios(grupos_inferiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+        elif dias >= 6:
+            a1 = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2) # Target: 5
+            b1 = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2) # Target: 5
+            c1 = selecionar_exercicios(['Pernas', 'Core'], 3, 2) # Target: 5
+            plano['Dia 1: Peito/Ombro/Tríceps A'] = a1; plano['Dia 2: Costas/Bíceps/Trapézio A'] = b1; plano['Dia 3: Pernas/Core A'] = c1
+            plano['Dia 4: Peito/Ombro/Tríceps B'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in a1]) or a1 # Target: 5
+            plano['Dia 5: Costas/Bíceps/Trapézio B'] = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2, excluir=[ex['Exercício'] for ex in b1]) or b1 # Target: 5
+            plano['Dia 6: Pernas/Core B'] = selecionar_exercicios(['Pernas', 'Core'], 3, 2, excluir=[ex['Exercício'] for ex in c1]) or c1 # Target: 5
 
     plano_final = {}
     for nome, exercicios_lista in plano.items():
@@ -1137,22 +1716,43 @@ def render_auth():
     st.stop()
 
 
+# [COMPLETA] Função render_main com IA, VIP, e lógica de modo ativo
 def render_main():
-    if st.session_state.get('workout_in_progress', False):
+    # Verifica os modos ativos em ordem: Warmup > Workout > Cooldown
+    if st.session_state.get('warmup_in_progress', False):
+        render_warmup_session()
+        st.stop()
+    elif st.session_state.get('workout_in_progress', False):
         render_workout_session()
         st.stop()
+    elif st.session_state.get('cooldown_in_progress', False):
+        render_cooldown_session()
+        st.stop()
+
+    # --- O código abaixo só é executado se nenhum modo estiver ativo ---
+
     check_notifications_on_open()
+
+    # --- Sidebar ---
     st.sidebar.title("🏋️ FitPro")
     st.sidebar.write(f"👤 {st.session_state.get('usuario_logado')}")
     if st.sidebar.button("🚪 Sair"):
         uid = st.session_state.get('user_uid')
-        if uid:
+        if uid and uid != 'demo-uid':
             salvar_dados_usuario_firebase(uid)
-        del cookies['user_uid']
-        keys = list(st.session_state.keys())
-        for k in keys:
-            if k != 'db': del st.session_state[k]
+
+        try:
+            del cookies['user_uid']
+        except Exception:
+            pass
+
+        keys_to_delete = [k for k in st.session_state.keys() if k != 'db']
+        for k in keys_to_delete:
+            del st.session_state[k]
+
+        ensure_session_defaults()
         st.rerun()
+
     st.sidebar.markdown("---")
     st.sidebar.subheader("Configurações")
     theme = st.sidebar.selectbox("Tema", ["light", "dark"],
@@ -1162,63 +1762,366 @@ def render_main():
                                          value=st.session_state['settings'].get('notify_on_login', True))
     st.session_state['settings']['notify_on_login'] = notify_on_open
     st.sidebar.checkbox("Modo offline (cache)", value=st.session_state.get('offline_mode', False), key='offline_mode')
+
     if st.session_state.get('role') == 'admin':
         st.sidebar.success("👑 Admin")
-        if st.sidebar.button("Painel Admin"):
-            st.session_state['page'] = 'Admin'
+
     if st.session_state.get('notificacoes'):
-        for n in st.session_state['notificacoes']:
-            if n['tipo'] == 'conquista':
+        for n in st.session_state.get('notificacoes', []):
+            if n.get('tipo') == 'conquista':
                 st.balloons()
-                st.success(n['msg'])
+                st.success(n.get('msg', 'Notificação'))
             else:
                 try:
-                    st.toast(n['msg'])
+                    st.toast(n.get('msg', 'Notificação'))
                 except Exception:
-                    st.info(n['msg'])
-    pages = ["Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino", "Registrar Treino",
-             "Progresso", "Fotos", "Comparar Fotos", "Medidas", "Planejamento Semanal", "Metas", "Nutrição", "Busca",
-             "Export/Backup"]
+                    st.info(n.get('msg', 'Notificação'))
+        st.session_state['notificacoes'] = []
+
+    # --- Navegação Principal (Selectbox) ---
+    pages = [
+        "Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino",
+        "Registrar Treino", "Progresso", "Fotos", "Comparar Fotos", "Medidas",
+        "Planejamento Semanal", "Metas", "Nutrição", "Busca",
+        "Export/Backup", "Solicitar VIP"
+    ]  # <-- "Monte seu Treino com IA" foi removido daqui
+
     if st.session_state.get('role') == 'admin':
         pages.append("Admin")
-    page = st.selectbox("Navegação", pages)
-    page_map = {
-        "Dashboard": render_dashboard, "Rede Social": render_rede_social, "Buscar Usuários": render_buscar_usuarios,
-        "Questionário": render_questionario, "Meu Treino": render_meu_treino,
-        "Registrar Treino": render_registrar_treino,
-        "Progresso": render_progresso, "Fotos": render_fotos, "Comparar Fotos": render_comparar_fotos,
-        "Medidas": render_medidas,
-        "Planejamento Semanal": render_planner, "Metas": render_metas, "Nutrição": render_nutricao,
-        "Busca": render_busca,
-        "Export/Backup": render_export_backup, "Admin": render_admin_panel,
-    }
-    render_func = page_map.get(page, lambda: st.write("Página em desenvolvimento."))
-    render_func()
 
+    if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in pages:
+        st.session_state['selected_page'] = "Dashboard"
+
+    page = st.selectbox(
+        "Navegação",
+        pages,
+        index=pages.index(st.session_state['selected_page']),
+        key='selected_page'
+    )
+
+    # Mapeamento completo das páginas
+    page_map = {
+        "Dashboard": render_dashboard,
+        "Rede Social": render_rede_social,
+        "Buscar Usuários": render_buscar_usuarios,
+        "Questionário": render_questionario,
+        "Meu Treino": render_meu_treino,
+        # "Monte seu Treino com IA": render_ai_workout, # <-- Linha removida
+        "Registrar Treino": render_registrar_treino,
+        "Progresso": render_progresso,
+        "Fotos": render_fotos,
+        "Comparar Fotos": render_comparar_fotos,
+        "Medidas": render_medidas,
+        "Planejamento Semanal": render_planner,
+        "Metas": render_metas,
+        "Nutrição": render_nutricao_gated,
+        "Busca": render_busca,
+        "Export/Backup": render_export_backup,
+        "Solicitar VIP": render_solicitar_vip,
+        "Admin": render_admin_panel,
+    }
+
+    render_func = page_map.get(page, lambda: st.write("Página em desenvolvimento."))
+
+    try:
+        render_func()
+    except NameError as e:
+        st.error(f"Erro: A função para a página '{page}' não foi encontrada.")
+        st.error(f"Detalhe: {e}")
+        st.code(
+            "Verifique se todas as suas funções 'render_...' (como render_fotos, render_medidas, etc.) estão definidas no seu código.")
+
+def render_admin_panel():
+    st.title("👑 Painel Admin")
+    st.warning("Use com cuidado — ações afetam usuários reais.")
+
+    # --- Seção para Solicitações VIP Pendentes ---
+    st.markdown("---")
+    st.subheader("📬 Solicitações de Acesso VIP Pendentes")
+
+    try:
+        # Busca solicitações com status 'pendente', ordenadas pela mais antiga
+        vip_requests_ref = db.collection('solicitacoes_vip').where('status', '==', 'pendente').order_by('timestamp').stream()
+        pending_requests = list(vip_requests_ref) # Converte para lista
+
+        if not pending_requests:
+            st.info("Nenhuma solicitação VIP pendente no momento.")
+        else:
+            st.write(f"Total de solicitações pendentes: {len(pending_requests)}")
+            for request in pending_requests:
+                req_data = request.to_dict()
+                req_id = request.id
+                req_user_uid = req_data.get('user_uid', 'N/A')
+                req_username = req_data.get('username', 'N/A')
+                req_email = req_data.get('user_email_contato', 'N/A') # Pega o email de contato
+                req_message = req_data.get('mensagem', '(Sem mensagem)')
+                req_time = req_data.get('timestamp')
+                req_time_str = req_time.strftime('%d/%m/%Y %H:%M') if isinstance(req_time, datetime) else "Data inválida"
+
+                with st.expander(f"De: {req_username} ({req_email}) - Em: {req_time_str}"):
+                    st.write(f"**UID do Usuário:** `{req_user_uid}`")
+                    st.write("**Mensagem:**")
+                    st.write(f"> {req_message}")
+                    st.markdown("---")
+
+                    col1_req, col2_req = st.columns(2)
+                    with col1_req:
+                        # Botão para marcar como processada
+                        if st.button("Marcar como Processada", key=f"process_{req_id}", use_container_width=True):
+                            try:
+                                db.collection('solicitacoes_vip').document(req_id).update({'status': 'processado'})
+                                st.success(f"Solicitação de {req_username} marcada como processada.")
+                                st.rerun() # Atualiza a lista
+                            except Exception as e:
+                                st.error(f"Erro ao atualizar status: {e}")
+
+    except Exception as e:
+        st.error(f"Erro ao buscar solicitações VIP: {e}")
+    # --- FIM DA SEÇÃO VIP ---
+
+
+    # --- Seção de Gerenciamento de Usuários ---
+    st.markdown("---")
+    st.subheader("👥 Gerenciar Usuários")
+    try:
+        users_stream = db.collection('usuarios').stream()
+        users = list(users_stream)
+    except Exception as e:
+        st.error(f"Erro ao listar usuários: {e}")
+        return
+
+    st.write(f"Total usuários: {len(users)}")
+    for u in users:
+        d = u.to_dict()
+        user_id = u.id
+        nome = d.get('username', (d.get('dados_usuario') or {}).get('nome', '-'))
+        # CORREÇÃO: Garante que current_role nunca seja None
+        current_role = d.get('role') or 'free'
+
+        st.markdown(f"**{nome}** (`{user_id}`)")
+        st.write(f"Treinos: {len(d.get('frequencia', []))} | Role Atual: **{current_role.upper()}**")
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            if st.button("👁️ Ver Dados", key=f"ver_{user_id}"):
+                 st.json(d)
+
+        with c2:
+            if current_role != 'vip' and current_role != 'admin':
+                if st.button("⭐ Tornar VIP", key=f"make_vip_{user_id}", type="primary"):
+                    try:
+                        db.collection('usuarios').document(user_id).update({'role': 'vip'})
+                        st.success(f"{nome} agora é VIP!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao tornar VIP: {e}")
+
+        with c3:
+            if current_role != 'free' and current_role != 'admin':
+                 if st.button("⬇️ Tornar Free", key=f"make_free_{user_id}"):
+                    try:
+                        db.collection('usuarios').document(user_id).update({'role': 'free'})
+                        st.success(f"{nome} agora é Free.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao tornar Free: {e}")
+
+        with c4:
+            if current_role != 'admin':
+                if st.button("🗑️ Excluir", key=f"del_{user_id}"):
+                    st.session_state['user_to_delete'] = user_id
+                    st.session_state['confirm_delete_user'] = True
+                    st.rerun()
+        st.markdown("---")
+
+    # Lógica de confirmação de exclusão
+    if st.session_state.get('confirm_delete_user'):
+        st.warning("Confirmar exclusão do usuário (irrevogável).")
+        ca, cb = st.columns(2)
+        with ca:
+            if st.button("✅ Confirmar exclusão"):
+                uid_del = st.session_state.get('user_to_delete')
+                if uid_del:
+                    try:
+                        try: auth.delete_user(uid_del)
+                        except Exception: pass
+                        db.collection('usuarios').document(uid_del).delete()
+                        st.success("Usuário excluído.")
+                    except Exception as e: st.error(f"Erro ao excluir: {e}")
+                st.session_state['confirm_delete_user'] = False; st.session_state['user_to_delete'] = None; st.rerun()
+        with cb:
+            if st.button("❌ Cancelar"):
+                st.session_state['confirm_delete_user'] = False; st.session_state['user_to_delete'] = None; st.rerun()
+
+
+
+def render_nutricao_gated():
+    user_role = st.session_state.get('role', 'free')
+
+    # --- CORREÇÃO AQUI ---
+    # Verifica se o role é 'vip' OU 'admin'
+    if user_role in ['vip', 'admin']:
+    # --- FIM DA CORREÇÃO ---
+        render_nutricao_vip()
+    else:
+        render_nutricao_free()
+
+
+# [NOVA] Página de "Anúncio" para usuários Free
+def render_nutricao_free():
+    st.title("🥗 Nutrição Avançada (VIP)")
+
+    # Reutiliza a função de CTA (Call to Action) VIP
+    render_vip_cta(
+        title="✨ Desbloqueie sua Nutrição VIP!",
+        text="A calculadora básica de TMB foi atualizada para um plano nutricional completo, exclusivo para membros VIP.",
+        button_text="Quero o Plano Nutricional VIP!",
+        key_prefix="cta_nutri"
+    )
+
+    st.markdown("---")
+    st.subheader("O que você desbloqueia:")
+    st.markdown("""
+    * **Metas de Calorias e Macros de Precisão:** Baseado no seu nível de atividade e objetivo (cutting, bulking ou manutenção).
+    * **Sugestão de Divisão de Refeições:** Um template de como dividir suas metas ao longo do dia.
+    * **Biblioteca de Alimentos:** Exemplos de fontes limpas de proteínas, carboidratos e gorduras.
+    * **Calculadora de Hidratação:** Saiba quanta água você realmente precisa beber.
+    """)
+
+
+# [NOVA] Página de Nutrição Robusta (apenas para VIPs)
+def render_nutricao_vip():
+    st.title("🥗 Plano de Nutrição VIP")
+    dados = st.session_state.get('dados_usuario') or {}
+
+    # Puxa dados do perfil ou usa defaults
+    peso_default = float(dados.get('peso', 70.0))
+    altura_default = float(dados.get('altura', 170.0))
+    idade_default = int(dados.get('idade', 25))
+    sexo_default_idx = 0 if dados.get('sexo', 'Masculino') == 'Masculino' else 1
+
+    # ----------------- TABS DA PÁGINA -----------------
+    tab_calc, tab_alimentos, tab_agua = st.tabs(["📊 Calculadora de Metas", "🥑 Biblioteca de Alimentos", "💧 Hidratação"])
+
+    with tab_calc:
+        st.subheader("1. Calcule suas Metas Diárias")
+        st.caption("Baseado na fórmula de Mifflin-St Jeor e seus objetivos.")
+
+        with st.form("form_nutri_vip"):
+            col1, col2 = st.columns(2)
+            with col1:
+                peso = st.number_input("Peso (kg)", min_value=30.0, value=peso_default, step=0.1)
+                altura = st.number_input("Altura (cm)", min_value=100.0, value=altura_default, step=0.1)
+                idade = st.number_input("Idade", min_value=12, max_value=100, value=idade_default)
+
+            with col2:
+                sexo = st.selectbox("Sexo", ["Masculino", "Feminino"], index=sexo_default_idx)
+                nivel_atividade = st.selectbox("Nível de Atividade Diária (incluindo treinos)",
+                                               ['Sedentário (pouco/nenhum exercício)', 'Leve (1-3 dias/semana)',
+                                                'Moderado (3-5 dias/semana)', 'Ativo (6-7 dias/semana)',
+                                                'Muito Ativo (trabalho físico + treino)'], index=2)
+                objetivo_dieta = st.selectbox("Qual seu objetivo nutricional?",
+                                              ['Manter Peso (Manutenção)', 'Perder Peso Leve (Déficit de ~10%)',
+                                               'Perder Peso (Déficit de ~20%)', 'Ganhar Peso Leve (Superávit de ~10%)',
+                                               'Ganhar Peso (Superávit de ~20%)'], index=0)
+
+            calc_submitted = st.form_submit_button("Calcular Metas Nutricionais")
+
+        if calc_submitted:
+            # 1. Calcular TMB
+            tmb = calcular_tmb_mifflin(sexo, peso, altura, idade)
+            # 2. Calcular Gasto Calórico Diário (TDEE)
+            multiplicador = get_multiplicador_atividade(nivel_atividade)
+            calorias_manutencao = tmb * multiplicador
+            # 3. Ajustar pelo Objetivo
+            calorias_meta = ajustar_calorias_objetivo(calorias_manutencao, objetivo_dieta)
+            # 4. Calcular Macros VIP
+            macros = calcular_macros_vip(calorias_meta, peso)
+
+            st.session_state['macros_vip'] = macros  # Salva para usar na outra seção
+            st.session_state['calorias_meta'] = calorias_meta
+
+            st.success(f"Metas calculadas para o objetivo: **{objetivo_dieta}**")
+
+            # Exibir resultados das metas
+            kcal_col, prot_col, carb_col, gord_col = st.columns(4)
+            kcal_col.metric("Calorias Totais", f"{calorias_meta:,.0f} kcal")
+            prot_col.metric("Proteínas", f"{macros['proteina_g']:,.0f} g")
+            carb_col.metric("Carboidratos", f"{macros['carboidratos_g']:,.0f} g")
+            gord_col.metric("Gorduras", f"{macros['gordura_g']:,.0f} g")
+
+        st.markdown("---")
+        st.subheader("2. Sugestão de Divisão de Refeições")
+
+        # Usa os dados salvos no session_state se existirem
+        if 'macros_vip' in st.session_state:
+            num_refeicoes = st.slider("Dividir em quantas refeições?", 3, 6, 4)
+            df_refeicoes = distribuir_refeicoes(st.session_state['macros_vip'], num_refeicoes)
+            st.dataframe(df_refeicoes, hide_index=True, use_container_width=True)
+            st.caption(
+                f"Esta é uma sugestão de divisão. O total diário é: {st.session_state['calorias_meta']:,.0f} kcal (P: {st.session_state['macros_vip']['proteina_g']}g, C: {st.session_state['macros_vip']['carboidratos_g']}g, G: {st.session_state['macros_vip']['gordura_g']}g)")
+        else:
+            st.info("Calcule suas metas acima para ver a sugestão de divisão de refeições.")
+
+    with tab_alimentos:
+        st.subheader("🥑 Biblioteca de Alimentos Sugeridos")
+        st.caption("Use esta lista como inspiração para montar suas refeições com base nas metas calculadas.")
+
+        col_p, col_c, col_g = st.columns(3)
+        with col_p:
+            st.markdown("<h5>🍗 Fontes de Proteína</h5>", unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {item}" for item in ALIMENTOS_DB["Proteínas"]))
+        with col_c:
+            st.markdown("<h5>🍚 Fontes de Carboidratos</h5>", unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {item}" for item in ALIMENTOS_DB["Carboidratos"]))
+        with col_g:
+            st.markdown("<h5>🥑 Fontes de Gordura</h5>", unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {item}" for item in ALIMENTOS_DB["Gorduras"]))
+
+    with tab_agua:
+        st.subheader("💧 Calculadora de Hidratação")
+        peso_agua = st.number_input("Seu Peso (kg)", min_value=30.0, value=peso_default, step=0.1, key="peso_agua")
+        ml_por_kg = st.slider("Mililitros (ml) por kg de peso", 30, 50, 35)
+
+        meta_agua_l = (peso_agua * ml_por_kg) / 1000
+
+        st.metric("Sua Meta Diária de Água", f"{meta_agua_l:.1f} Litros")
+        st.caption("Lembre-se: em dias de treino intenso ou muito calor, você pode precisar de mais.")
 
 # ---------------------------
 # Page implementations
 # ---------------------------
 def render_workout_session():
     st.title("🔥 Treino em Andamento")
-    plano_atual, idx_atual = st.session_state['current_workout_plan'], st.session_state['current_exercise_index']
+
+    # Pega os dados do estado da sessão
+    plano_atual = st.session_state.get('current_workout_plan', [])
+    idx_atual = st.session_state.get('current_exercise_index', 0)
+
+    if not plano_atual or idx_atual >= len(plano_atual):
+        st.error("Erro ao carregar o exercício atual. Voltando para a seleção de treino.")
+        st.session_state['workout_in_progress'] = False
+        time.sleep(2)
+        st.rerun()
+        return
+
     exercicio_atual = plano_atual[idx_atual]
-    nome_exercicio, series_str = exercicio_atual['Exercício'], exercicio_atual['Séries']
+    nome_exercicio = exercicio_atual.get('Exercício', 'Exercício Desconhecido')
+    series_str = exercicio_atual.get('Séries', '3')
     try:
         num_series = int(str(series_str).split('-')[0])
-    except:
+    except ValueError:
         num_series = 3
 
-    # --- Barra de Progresso e Timer ---
     progresso = (idx_atual + 1) / len(plano_atual)
     col_prog, col_timer = st.columns(2)
     col_prog.progress(progresso, text=f"Exercício {idx_atual + 1} de {len(plano_atual)}")
     timer_placeholder = col_timer.empty()
 
-    # --- Lógica do Timer Único ---
     is_resting = False
-    if st.session_state.rest_timer_end:
-        remaining = st.session_state.rest_timer_end - time.time()
+    rest_timer_end_value = st.session_state.get('rest_timer_end', None)
+    if rest_timer_end_value:
+        remaining = rest_timer_end_value - time.time()
         if remaining > 0:
             is_resting = True
             mins, secs = divmod(int(remaining), 60)
@@ -1230,89 +2133,248 @@ def render_workout_session():
             st.toast("💪 Descanso finalizado!")
             st.rerun()
 
-    # --- Container do Exercício Atual (com vídeo) ---
     with st.container(border=True):
-        col_video, col_details = st.columns([2, 3])
-        # --- CORREÇÃO AQUI ---
-        with col_video: # Substitua 'ith' e 'col_gif:' por esta linha, com a indentação correta
-            # Chama a NOVA função de busca e usa st.video
+        col_video, col_details = st.columns([1, 2])
+        with col_video:
             video_url = find_exercise_video_youtube(nome_exercicio)
             if video_url:
-                st.video(video_url)
+                st.link_button("🎥 Assistir Execução", video_url)
+                st.caption(f"Abre o vídeo de {nome_exercicio} no YouTube")
             else:
-                st.text("Vídeo indisponível")
-        # --- FIM DA CORREÇÃO ---
+                st.info("Vídeo indisponível.")
         with col_details:
             st.header(nome_exercicio)
             st.markdown(
-                f"**Séries:** `{exercicio_atual['Séries']}` | **Repetições:** `{exercicio_atual['Repetições']}`\n**Descanso:** `{exercicio_atual['Descanso']}`")
+                f"**Séries:** `{exercicio_atual.get('Séries', 'N/A')}` | **Repetições:** `{exercicio_atual.get('Repetições', 'N/A')}`\n**Descanso:** `{exercicio_atual.get('Descanso', 'N/A')}`")
+            ex_data = EXERCICIOS_DB.get(nome_exercicio, {})
+            descricao_exercicio = ex_data.get('descricao')
+            if descricao_exercicio:
+                st.markdown("---")
+                st.caption(f"📝 **Como Fazer:** {descricao_exercicio}")
+
+    st.subheader("Registre suas séries")
     for i in range(num_series):
         set_key = f"set_{idx_atual}_{i}"
-        if set_key not in st.session_state: st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
+        if set_key not in st.session_state:
+            st.session_state[set_key] = {'completed': False, 'weight': 0.0, 'reps': 0}
         set_info = st.session_state[set_key]
         cols = st.columns([1, 2, 2, 1])
-        disable_checkbox = is_resting and not set_info['completed']  # Desabilita checkbox se estiver em descanso
+        disable_inputs = is_resting and not set_info['completed']
         completed = cols[0].checkbox(f"Série {i + 1}", value=set_info['completed'], key=f"check_{set_key}",
-                                     disabled=disable_checkbox)
-        if completed != set_info['completed']:
-            set_info['completed'] = completed
-            if completed:
-                if is_resting:
-                    st.warning("Termine seu descanso antes de marcar a próxima série!")
-                    set_info['completed'] = False
-                else:
-                    descanso_str = exercicio_atual.get('Descanso', '60s')
-                    try:
-                        rest_seconds = int(re.search(r'\d+', descanso_str).group())
-                    except:
-                        rest_seconds = 60
-                    st.session_state.rest_timer_end = time.time() + rest_seconds
-                    st.session_state.workout_log.append(
-                        {'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
-                         'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()})
-            elif set_key in st.session_state['set_timers']:
-                del st.session_state['set_timers'][
-                    set_key]  # Este else foi mantido por segurança, embora a lógica do timer esteja no rest_timer_end
-            st.rerun()
+                                     disabled=disable_inputs)
+
+        if completed and not set_info['completed']:
+            if is_resting:
+                st.warning("Termine seu descanso!");
+                st.session_state[set_key]['completed'] = False;
+                st.rerun()
+            else:
+                set_info['completed'] = True
+                descanso_str = exercicio_atual.get('Descanso', '60s')
+                try:
+                    rest_seconds = int(re.search(r'\d+', descanso_str).group())
+                except:
+                    rest_seconds = 60
+                st.session_state.rest_timer_end = time.time() + rest_seconds
+                st.session_state.workout_log.append(
+                    {'data': date.today().isoformat(), 'exercicio': nome_exercicio, 'series': i + 1,
+                     'peso': set_info['weight'], 'reps': set_info['reps'], 'timestamp': iso_now()})
+                st.rerun()
         if not set_info['completed']:
             set_info['weight'] = cols[1].number_input("Peso (kg)", key=f"weight_{set_key}",
-                                                      value=float(set_info['weight']), format="%.1f",
-                                                      disabled=is_resting)
-            set_info['reps'] = cols[2].number_input("Reps", key=f"reps_{set_key}", value=int(set_info['reps']),
-                                                    disabled=is_resting)
+                                                      value=float(set_info.get('weight', 0.0)), format="%.1f",
+                                                      disabled=disable_inputs)
+            set_info['reps'] = cols[2].number_input("Reps", key=f"reps_{set_key}", value=int(set_info.get('reps', 0)),
+                                                    disabled=disable_inputs)
         else:
-            cols[1].write(f"Peso: **{set_info['weight']} kg**");
-            cols[2].write(f"Reps: **{set_info['reps']}**")
+            cols[1].write(f"Peso: **{set_info.get('weight', 0.0)} kg**")
+            cols[2].write(f"Reps: **{set_info.get('reps', 0)}**")
 
     st.markdown("---")
     all_sets_done = all(
         st.session_state.get(f"set_{idx_atual}_{i}", {}).get('completed', False) for i in range(num_series))
     nav_cols = st.columns([1, 1, 1])
-    if all_sets_done:
-        if idx_atual < len(plano_atual) - 1:
-            if nav_cols[1].button("Próximo Exercício →", use_container_width=True, type="primary"):
-                st.session_state['current_exercise_index'] += 1;
+
+    with nav_cols[1]:  # Botão Central
+        if all_sets_done:
+            if idx_atual < len(plano_atual) - 1:
+                if st.button("Próximo Exercício →", use_container_width=True, type="primary", disabled=is_resting):
+                    st.session_state['current_exercise_index'] += 1
+                    st.rerun()
+            else:
+                if st.button("✅ Concluir Último Exercício", use_container_width=True, type="primary",
+                             disabled=is_resting):
+                    hist = st.session_state.get('historico_treinos', [])
+                    hist.extend(st.session_state.workout_log)
+                    st.session_state['historico_treinos'] = hist
+                    freq = st.session_state.get('frequencia', [])
+                    today = date.today()
+                    if today not in freq: freq.append(today); st.session_state['frequencia'] = freq
+                    salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+                    st.session_state['workout_in_progress'] = False
+                    st.session_state['workout_log'] = []
+                    st.balloons()
+                    st.success("Treino finalizado com sucesso!")
+
+                    if st.session_state.get('role') == 'vip':
+                        st.session_state['current_routine'] = COOLDOWN_ROUTINE_VIP_YOGA
+                    else:
+                        st.session_state['current_routine'] = COOLDOWN_ROUTINE
+
+                    st.session_state.cooldown_in_progress = True
+                    st.session_state.current_routine_exercise_index = 0
+
+                    # --- CORREÇÃO AQUI ---
+                    # Sintaxe de limpeza corrigida (usando loop for)
+                    keys_to_delete = [k for k in st.session_state if k.startswith('set_')]
+                    for k in keys_to_delete:
+                        del st.session_state[k]
+                    # --- FIM DA CORREÇÃO ---
+
+                    time.sleep(1.5)
+                    st.rerun()
+
+    with nav_cols[2]:  # Botão da Direita
+        if st.button("❌ Desistir do Treino", use_container_width=True):
+            st.session_state['workout_in_progress'] = False
+            st.session_state['workout_log'] = []
+            st.session_state['rest_timer_end'] = None
+
+            # --- CORREÇÃO AQUI ---
+            # Sintaxe de limpeza corrigida (usando loop for)
+            keys_to_delete = [k for k in st.session_state if k.startswith('set_')]
+            for k in keys_to_delete:
+                del st.session_state[k]
+            # --- FIM DA CORREÇÃO ---
+
+            st.warning("Treino cancelado.")
+            time.sleep(1)
+            st.rerun()
+
+    # CTA para Cooldown VIP
+    if all_sets_done and idx_atual == len(plano_atual) - 1 and st.session_state.get('role') == 'free':
+        st.markdown("---")
+        with st.container(border=True):
+            st.info(
+                "🧘 **Membros VIP têm acesso a rotinas de alongamento guiadas (Yoga, Foco em Recuperação) após o treino.**")
+            if st.button("Quero as rotinas VIP!", key="cta_cooldown"):
+                st.session_state['selected_page'] = "Solicitar VIP"
                 st.rerun()
+
+
+def render_warmup_session():
+    st.title("🔥 Aquecimento Guiado")
+
+    # [MODIFICADO] Pega a rotina selecionada do session_state
+    # 'current_routine' é definida pelo botão clicado em 'render_meu_treino'
+    # Se não for definida por algum motivo, usa a rotina padrão (WARMUP_ROUTINE)
+    routine = st.session_state.get('current_routine', WARMUP_ROUTINE)
+
+    idx = st.session_state.get('current_routine_exercise_index', 0)  # Pega o índice atual
+
+    # Verifica se já terminou a rotina
+    if idx >= len(routine):
+        st.success("Aquecimento concluído! Pronto para o treino.")
+        if st.button("Ir para Seleção de Treino", type="primary"):
+            # Limpa estados da rotina ao sair
+            st.session_state.warmup_in_progress = False
+            st.session_state.current_routine_exercise_index = 0
+            st.session_state.pop('current_routine', None)  # Limpa a rotina selecionada
+            # Limpa estados do timer (caso tenham sido usados em versões anteriores)
+            st.session_state.pop('routine_timer_end', None)
+            st.session_state.pop('timer_finished_flag', None)
+            st.rerun()
+        st.stop()  # Interrompe a execução aqui se terminou
+
+    # Pega os detalhes do exercício atual
+    exercise = routine[idx]
+    nome = exercise["nome"]
+    # duracao = exercise["duracao_s"] # Duração não é mais usada ativamente
+    descricao = exercise["descricao"]
+
+    st.header(f"{idx + 1}/{len(routine)}. {nome}")
+    st.progress((idx + 1) / len(routine))
+
+    col_video, col_info = st.columns([1, 1])
+
+    # --- Coluna do Vídeo ---
+    with col_video:
+        video_url = find_exercise_video_youtube(nome)
+        if video_url:
+            st.link_button("🎥 Assistir Execução", video_url)
+            st.caption(f"Abre o vídeo de {nome} no YouTube")
         else:
-            if nav_cols[1].button("✅ Finalizar Treino", use_container_width=True, type="primary"):
-                hist = st.session_state.get('historico_treinos', []);
-                hist.extend(st.session_state.workout_log);
-                st.session_state['historico_treinos'] = hist
-                freq = st.session_state.get('frequencia', []);
-                today = date.today()
-                if today not in freq: freq.append(today); st.session_state['frequencia'] = freq
-                salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
-                st.session_state['workout_in_progress'] = False;
-                st.balloons();
-                st.success("Treino finalizado!");
-                time.sleep(2);
-                st.rerun()
-    if nav_cols[2].button("❌ Desistir do Treino", use_container_width=True):
-        st.session_state['workout_in_progress'] = False;
-        st.warning("Treino cancelado.");
-        time.sleep(1);
+            st.info("Vídeo indisponível.")
+
+    # --- Coluna de Informações e Botão Próximo ---
+    with col_info:
+        st.markdown(f"**📝 Como Fazer:** {descricao}")
+        st.markdown("---")
+
+        # Botão para avançar para o próximo exercício
+        if st.button("Próximo Exercício →", key=f"next_warmup_{idx}", type="primary"):
+            st.session_state.current_routine_exercise_index += 1
+            st.rerun()  # Recarrega para mostrar o próximo item
+
+    # --- Fim da Coluna de Informações ---
+
+    st.markdown("---")
+    # Botão para Sair (sempre visível)
+    if st.button("❌ Sair do Aquecimento", key="skip_warmup"):
+        st.session_state.warmup_in_progress = False
+        st.session_state.current_routine_exercise_index = 0
+        st.session_state.pop('current_routine', None)  # Limpa a rotina selecionada
+        st.session_state.pop('routine_timer_end', None)
+        st.session_state.pop('timer_finished_flag', None)
+        st.warning("Aquecimento interrompido.")
+        time.sleep(1)
         st.rerun()
 
+def render_cooldown_session():
+    st.title("🧘 Alongamento Pós-Treino")
+
+    routine = COOLDOWN_ROUTINE
+    idx = st.session_state.current_routine_exercise_index
+
+    if idx >= len(routine):
+        st.success("Alongamento concluído! Ótima recuperação.")
+        if st.button("Voltar ao Dashboard"):
+            st.session_state.cooldown_in_progress = False
+            # Poderia redirecionar para uma página específica se quisesse
+            st.rerun()
+        st.stop()
+
+    exercise = routine[idx]
+    nome = exercise["nome"]
+    duracao = exercise["duracao_s"]  # Duração por lado, se aplicável
+    descricao = exercise["descricao"]
+
+    st.header(f"{idx + 1}. {nome}")
+    st.progress((idx + 1) / len(routine))
+    st.info(f"Mantenha a posição por aproximadamente **{duracao} segundos** (por lado, se aplicável).")
+
+    col_video, col_info = st.columns([1, 1])
+
+    with col_video:
+        video_url = find_exercise_video_youtube(nome)
+        if video_url:
+            st.video(video_url)
+        else:
+            st.info("Vídeo indisponível.")
+
+    with col_info:
+        st.markdown(f"**📝 Como Fazer:** {descricao}")
+        st.markdown("---")
+        # Botão simples para avançar (sem timer obrigatório no cooldown)
+        if st.button("Próximo Alongamento →", key=f"next_cooldown_{idx}", type="primary"):
+            st.session_state.current_routine_exercise_index += 1
+            st.rerun()
+
+    if st.button("❌ Finalizar Alongamento Agora", key="skip_cooldown"):
+        st.session_state.cooldown_in_progress = False
+        st.warning("Alongamento finalizado.")
+        time.sleep(1)
+        st.rerun()
 
 def render_rede_social():
     st.title("🌐 Feed Social")
@@ -1419,38 +2481,94 @@ def render_buscar_usuarios():
 
 def render_dashboard():
     st.title("📊 Dashboard")
-    show_logo_center()
-    dados = st.session_state.get('dados_usuario') or {}
-    num_treinos = len(set(st.session_state.get('frequencia', [])))
-    st.metric("Treinos Completos", num_treinos)
-    if num_treinos > 0:
-        info = verificar_periodizacao(num_treinos)
-        fase = info['fase_atual']
-        st.markdown(f"""<div style='padding:20px;border-radius:12px;background:linear-gradient(90deg,{fase['cor']},#ffffff);color:#111;'>
-            <h3>🎯 Fase Atual: {fase['nome']} | Ciclo {info['numero_ciclo']}</h3>
-            <p>{fase['reps']} reps · {fase['series']} séries · Descanso {fase['descanso']}</p></div>""",
-                    unsafe_allow_html=True)
-    if st.session_state.get('medidas'):
-        dfm = pd.DataFrame(st.session_state['medidas'])
-        dfm['data'] = pd.to_datetime(dfm['data'])
-        fig = px.line(dfm, x='data', y='valor', color='tipo', markers=True, title='Evolução de Medidas')
-        st.plotly_chart(fig, use_container_width=True)
-    st.subheader("📅 Calendário de Treinos (últimos 30 dias)")
-    if st.session_state.get('frequencia'):
-        hoje = datetime.now().date()
-        ult30 = [hoje - timedelta(days=i) for i in range(30)]
-        treinos_30 = set(st.session_state['frequencia'])
-        df_cal = pd.DataFrame({'data': ult30})
-        df_cal['treinou'] = df_cal['data'].isin(treinos_30).astype(int)
-        df_cal['data'] = pd.to_datetime(df_cal['data'])
-        df_cal['weekday'] = df_cal['data'].dt.day_name()
-        df_cal['week'] = df_cal['data'].dt.isocalendar().week
+    show_logo_center() # Mantém o logo e título
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+    user_role = st.session_state.get('role', 'free') # Pega o role do usuário
+
+    with col1:
+        st.subheader("🚀 Seu Progresso")
+        num_treinos = len(set(st.session_state.get('frequencia', [])))
+        st.metric("Total de Treinos Completos", num_treinos)
+
+        streak_semanal = 0
+        frequencia_completa = st.session_state.get('frequencia', [])
+        if frequencia_completa:
+            try:
+                datas_treino = sorted([d for d in frequencia_completa if isinstance(d, date)])
+                if datas_treino:
+                    hoje = date.today(); semana_atual = hoje.isocalendar()[1]; ano_atual = hoje.year
+                    semanas_treinadas = sorted(list(set(d.isocalendar()[0:2] for d in datas_treino)), reverse=True)
+                    semana_esperada = semana_atual; ano_esperado = ano_atual
+                    for ano_semana, num_semana in semanas_treinadas:
+                        if ano_semana == ano_esperado and num_semana == semana_esperada:
+                            streak_semanal += 1
+                            dia_anterior = hoje - timedelta(weeks=streak_semanal)
+                            semana_esperada = dia_anterior.isocalendar()[1]; ano_esperado = dia_anterior.year
+                        else:
+                            if streak_semanal == 0 and ano_semana == ano_atual and num_semana == semana_atual: streak_semanal = 1
+                            break
+            except Exception: streak_semanal = 0
+        st.metric("🔥 Sequência Semanal", f"{streak_semanal} Semanas")
+
+        conquistas = [n['msg'] for n in st.session_state.get('notificacoes', []) if n.get('tipo') == 'conquista']
+        if conquistas: st.success(f"🏆 Última Conquista: {conquistas[-1]}")
+
+
+    with col2:
+        st.subheader("🎯 Foco Atual")
+        if num_treinos > 0:
+            info = verificar_periodizacao(num_treinos); fase = info['fase_atual']; cor_fase = fase.get('cor', '#4ECDC4')
+            st.markdown(f"""
+                <div style='padding: 15px; border-radius: 10px; background-color: {cor_fase}; color: #FFFFFF; border-left: 5px solid #FFFFFF;'>
+                <h4 style='margin:0; color: #FFFFFF;'>Fase: {fase['nome']} (Ciclo {info['numero_ciclo']})</h4>
+                <small>{fase['reps']} reps · {fase['series']} séries · Descanso {fase['descanso']}</small><br>
+                <small>Treinos restantes na fase: {info['treinos_restantes']}</small>
+                </div> <br> """, unsafe_allow_html=True)
+        else: st.info("Complete seu primeiro treino para iniciar a periodização!")
+
+        quotes = ["...", "...", "..."] # Sua lista de frases
+        st.markdown(f"> *“{random.choice(quotes)}”*", help="Frase do dia")
+
+    st.markdown("---")
+    st.subheader("📅 Calendário de Treinos")
+
+    # [GATING APLICADO AQUI]
+    limite_dias_calendario = None # VIP vê tudo
+    if user_role == 'free':
+        limite_dias_calendario = 30 # Free vê últimos 30 dias
+        st.caption(f"ℹ️ Usuários VIP têm acesso ao histórico completo. Exibindo últimos {limite_dias_calendario} dias.")
+
+    frequencia_para_calendario = []
+    if frequencia_completa:
+        hoje_cal = date.today()
+        if limite_dias_calendario:
+            data_limite_cal = hoje_cal - timedelta(days=limite_dias_calendario)
+            frequencia_para_calendario = [d for d in frequencia_completa if isinstance(d, date) and d >= data_limite_cal]
+        else: # VIP
+            frequencia_para_calendario = [d for d in frequencia_completa if isinstance(d, date)]
+
+    if frequencia_para_calendario:
+        dias_display = 30 # Sempre mostrar 30 dias no visual
+        ultimos_dias_cal = [hoje_cal - timedelta(days=i) for i in range(dias_display)]
+        treinos_periodo_cal = set(frequencia_para_calendario)
+        df_cal = pd.DataFrame({'data_obj': ultimos_dias_cal})
+        df_cal['data'] = df_cal['data_obj'].apply(lambda d: d.strftime('%Y-%m-%d'))
+        df_cal['treinou'] = df_cal['data_obj'].apply(lambda d: 1 if d in treinos_periodo_cal else 0)
+        df_cal['dia_semana_num'] = df_cal['data_obj'].apply(lambda d: d.weekday())
+        df_cal['dia_semana_nome'] = df_cal['data_obj'].apply(lambda d: d.strftime('%a'))
+        df_cal['semana_ano'] = df_cal['data_obj'].apply(lambda d: d.isocalendar()[1])
+        dias_ordem = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]
         try:
-            pivot = df_cal.pivot(index='week', columns='weekday', values='treinou').fillna(0)
-            fig = px.imshow(pivot, labels=dict(x='Dia', y='Semana', color='Treinou'), text_auto=True)
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception:
-            st.table(df_cal)
+            heatmap_data = df_cal.pivot_table(index='semana_ano', columns='dia_semana_num', values='treinou', aggfunc='max').fillna(0)
+            heatmap_data = heatmap_data.reindex(columns=range(7), fill_value=0); heatmap_data.columns = dias_ordem
+            fig_cal = px.imshow(heatmap_data, labels=dict(x="Dia", y="Semana", color="Treinou"), x=dias_ordem, text_auto=False, aspect="auto", color_continuous_scale=px.colors.sequential.Greens)
+            fig_cal.update_xaxes(side="top"); fig_cal.update_layout(title="Visão Semanal (Verde = Treinou)")
+            st.plotly_chart(fig_cal, use_container_width=True)
+        except Exception as e:
+             st.warning(f"Não foi possível gerar o calendário visual: {e}")
+             st.dataframe(df_cal[['data', 'dia_semana_nome', 'treinou']].sort_values(by='data').head(30))
     else:
         st.info("Registre treinos para ver o calendário.")
 
@@ -1504,76 +2622,103 @@ def render_questionario():
 def render_meu_treino():
     st.title("💪 Meu Treino")
     plano = st.session_state.get('plano_treino')
+    user_role = st.session_state.get('role', 'free')  # Pega o role do usuário
 
+    # Checagem inicial mais robusta para plano vazio
     plano_vazio = True
     if plano and isinstance(plano, dict):
         for nome_treino, treino_data in plano.items():
+            # Verifica se é um DataFrame não vazio ou uma lista não vazia de dicionários
             if isinstance(treino_data, pd.DataFrame) and not treino_data.empty:
-                plano_vazio = False; break
+                plano_vazio = False;
+                break
             elif isinstance(treino_data, list) and treino_data and all(isinstance(item, dict) for item in treino_data):
-                plano_vazio = False; break
+                plano_vazio = False;
+                break
 
     if not plano or plano_vazio:
         st.info("Você ainda não tem um plano de treino. Vá para a página 'Questionário' para gerar o seu primeiro!")
         return
 
+    # Exibe a descrição do plano
     dados = st.session_state.get('dados_usuario') or {}
     st.info(
-        f"Este plano foi criado para um atleta **{dados.get('nivel', '')}** treinando **{dados.get('dias_semana', '')}** dias por semana com foco em **{dados.get('objetivo', '')}**.")
+        f"Este plano foi criado para um atleta **{dados.get('nivel', 'N/A')}** treinando **{dados.get('dias_semana', 'N/A')}** dias por semana com foco em **{dados.get('objetivo', 'N/A')}**.")
     st.markdown("---")
 
+    # Botão Geral de Aquecimento (para todos)
+    if st.button("🔥 Iniciar Aquecimento Padrão", use_container_width=True):
+        st.session_state.warmup_in_progress = True
+        st.session_state['current_routine'] = WARMUP_ROUTINE  # Define a rotina padrão
+        st.session_state.current_routine_exercise_index = 0
+        st.session_state.routine_timer_end = None
+        st.rerun()
+
+    # [NOVO] CTA para rotinas VIP
+    if user_role == 'free':
+        # Botão sutil que leva para a página VIP
+        st.caption("✨ Membros VIP têm acesso a mais rotinas (Mobilidade, Yoga).")
+        if st.button("Saiba mais sobre rotinas VIP", key="cta_warmup_learn_more", type="link",
+                     use_container_width=True):
+            st.session_state['selected_page'] = "Solicitar VIP"
+            st.rerun()
+    else:  # Se for VIP
+        # Botão para rotina VIP (Exemplo)
+        if st.button("🤸‍♂️ Iniciar Aquecimento VIP (Mobilidade)", use_container_width=True):
+            st.session_state.warmup_in_progress = True
+            st.session_state['current_routine'] = WARMUP_ROUTINE_VIP_MOBILITY  # Define a rotina VIP
+            st.session_state.current_routine_exercise_index = 0
+            st.rerun()
+
+    st.markdown("---")
+
+    # Loop para exibir os treinos (A, B, C...)
     for nome_treino, treino_data in plano.items():
+        # Garante que df_treino seja um DataFrame, tratando se treino_data já é um DF ou uma lista
         if isinstance(treino_data, pd.DataFrame):
             df_treino = treino_data
         elif isinstance(treino_data, list):
-            df_treino = pd.DataFrame(treino_data)
+            df_treino = pd.DataFrame(treino_data)  # Converte lista de dicts para DF
         else:
-            df_treino = pd.DataFrame()
+            df_treino = pd.DataFrame()  # Cria DF vazio se o dado for inválido
 
-        if df_treino.empty: continue
+        if df_treino.empty: continue  # Pula este dia se não houver exercícios
 
         col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader(nome_treino)
             st.caption(f"{len(df_treino)} exercícios")
         with col2:
-            # Botão para iniciar o modo interativo (existente)
+            # Botão para iniciar o modo interativo
             if st.button("▶️ Iniciar Treino", key=f"start_{nome_treino}", use_container_width=True, type="primary"):
                 st.session_state.update(
                     {'workout_in_progress': True, 'current_workout_plan': df_treino.to_dict('records'),
                      'current_exercise_index': 0, 'workout_log': [], 'rest_timer_end': None})
                 st.rerun()
 
-            # --- NOVO BOTÃO ADICIONADO ABAIXO ---
+            # Botão para registro rápido (contabilizar frequência)
             if st.button("✅ Marcar Concluído", key=f"quick_complete_{nome_treino}", use_container_width=True):
-                hoje = date.today()  # Pega a data atual
+                hoje = date.today()
                 frequencia_atual = st.session_state.get('frequencia', [])
-
-                # Verifica se o treino de hoje já foi contabilizado
                 if hoje not in frequencia_atual:
-                    frequencia_atual.append(hoje)  # Adiciona data à lista
-                    st.session_state['frequencia'] = frequencia_atual  # Atualiza o estado da sessão
-
-                    # Salva a alteração no Firebase
+                    frequencia_atual.append(hoje);
+                    st.session_state['frequencia'] = frequencia_atual
                     salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
-
                     st.toast(f"Ótimo! Treino '{nome_treino}' contabilizado para hoje.")
-
-                    # Opcional: Forçar re-run para atualizar contadores no dashboard imediatamente
-                    # time.sleep(1) # Pequena pausa para o toast ser visível
-                    # st.rerun()
                 else:
-                    # Informa que já foi contabilizado
                     st.toast("O treino de hoje já foi contabilizado!")
-            st.caption("Marca o dia como treinado.")  # Legenda explicativa
-            # --- FIM DO NOVO BOTÃO ---
+            st.caption("Marca o dia como treinado.")
 
-        # O restante do código (expanders, vídeos, etc.) permanece igual
+        # Expanders para os exercícios
         for index, row in df_treino.iterrows():
-            exercicio, series, repeticoes, descanso = row['Exercício'], row['Séries'], row['Repetições'], row[
-                'Descanso']
+            exercicio = row['Exercício']
+            series = row['Séries']
+            repeticoes = row['Repetições']
+            descanso = row['Descanso']
+
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
-                col_media, col_instr = st.columns([1, 2])
+                col_media, col_instr = st.columns([1, 2])  # Proporção [1, 2]
+
                 with col_media:
                     video_url = find_exercise_video_youtube(exercicio)
                     if video_url:
@@ -1581,24 +2726,32 @@ def render_meu_treino():
                         st.caption(f"Abre o vídeo de {exercicio} no YouTube")
                     else:
                         st.info("Vídeo de execução indisponível.")
+
                 with col_instr:
                     st.markdown("##### 📋 **Instruções**")
                     st.markdown(
                         f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
                     st.markdown("---")
+
                     ex_data = EXERCICIOS_DB.get(exercicio, {})
                     grupo_muscular = ex_data.get('grupo', 'N/A')
                     equipamento = ex_data.get('equipamento', 'N/A')
                     descricao_exercicio = ex_data.get('descricao')
+
                     st.write(f"**Grupo Muscular:** {grupo_muscular}")
                     st.write(f"**Equipamento:** {equipamento}")
+
                     if descricao_exercicio:
                         st.markdown("---")
                         st.markdown(f"**📝 Como Fazer:**\n{descricao_exercicio}")
-                    st.markdown(" ")
-                    st.button("🔄 Trocar Exercício", key=f"swap_{nome_treino}_{index}", on_click=trocar_exercicio,
-                              args=(nome_treino, index, exercicio), use_container_width=True)
-        st.markdown("---")
+
+                    st.markdown(" ")  # Espaço
+                    st.button("🔄 Trocar Exercício",
+                              key=f"swap_{nome_treino}_{index}",
+                              on_click=trocar_exercicio,
+                              args=(nome_treino, index, exercicio),
+                              use_container_width=True)
+        st.markdown("---")  # Separador entre os treinos (A, B, C...)
 
 
 def render_registrar_treino():
@@ -1646,157 +2799,338 @@ def render_registrar_treino():
                         if uid: salvar_dados_usuario_firebase(uid)
                         st.success("Obrigado pelo feedback!")
 
+def render_prs(historico_completo):
+    st.markdown("---")
+    st.subheader("🏆 Recordes Pessoais (VIP)")
+    if not historico_completo:
+        st.info("Registre treinos para calcular seus recordes.")
+        return
+    df_hist = pd.DataFrame(historico_completo)
+    if not all(col in df_hist.columns for col in ['exercicio', 'peso', 'reps', 'data']):
+         st.warning("Dados históricos incompletos para PRs.")
+         return
+    df_hist['peso'] = pd.to_numeric(df_hist['peso'], errors='coerce')
+    df_hist['reps'] = pd.to_numeric(df_hist['reps'], errors='coerce')
+    try: # Tratamento robusto de datas
+        def safe_to_date_prs(d):
+            if isinstance(d, date): return d
+            try: return datetime.fromisoformat(str(d).split('T')[0]).date()
+            except: return None
+        df_hist['data_obj'] = df_hist['data'].apply(safe_to_date_prs)
+        df_hist = df_hist.dropna(subset=['peso', 'reps', 'data_obj'])
+    except Exception: st.error("Erro ao processar datas para PRs."); return
+    if df_hist.empty: st.info("Nenhum registro válido para PRs."); return
+
+    exercicios_pr = [ # Lista de exercícios principais
+        'Agachamento com Barra', 'Agachamento Goblet', 'Leg Press 45°', 'Supino Reto com Barra',
+        'Supino Reto com Halteres', 'Desenvolvimento Militar com Barra', 'Desenvolvimento com Halteres (sentado)',
+        'Remada Curvada com Barra', 'Puxada Alta (Lat Pulldown)', 'Barra Fixa', 'Levantamento Terra'
+    ]
+    df_prs = df_hist[df_hist['exercicio'].isin(exercicios_pr)].copy()
+    if df_prs.empty: st.info("Nenhum registro para os exercícios principais de PR."); return
+
+    # Pega o índice do maior peso para cada exercício
+    prs_idx = df_prs.loc[df_prs.groupby('exercicio')['peso'].idxmax()].index
+    prs = df_prs.loc[prs_idx].sort_values(by='exercicio')
+
+    st.dataframe(
+        prs[['exercicio', 'peso', 'reps', 'data_obj']],
+        column_config={
+            "exercicio": "Exercício",
+            "peso": st.column_config.NumberColumn("Recorde (kg)", format="%.1f kg"),
+            "reps": "Reps no Recorde",
+            "data_obj": st.column_config.DateColumn("Data", format="DD/MM/YYYY")
+        }, hide_index=True, use_container_width=True
+    )
+
+
+def render_solicitar_vip():
+    st.title("✨ Solicitar Acesso VIP")
+    st.markdown("""
+    Desbloqueie o potencial máximo do FitPro! Usuários VIP têm acesso a:
+    * 📈 Histórico de treino completo (sem limite de dias).
+    * 🏆 Análise de Recordes Pessoais (PRs).
+    * 🤸‍♂️ Rotinas de aquecimento e alongamento adicionais.
+    * ... e muito mais em breve!
+    """)
+
+    # Adiciona um container com borda para deixar o formulário mais bonito
+    with st.container(border=True):
+        st.subheader("Formulário de Solicitação")
+        st.info(
+            "Preencha seu melhor e-mail para contato. Nossa equipe administrativa revisará sua solicitação e enviará as instruções de upgrade manualmente.")
+
+        user_uid = st.session_state.get('user_uid')
+
+        # Não vamos mais tentar buscar o email do Firebase Auth aqui
+        # Em vez disso, vamos pedir ao usuário
+
+        with st.form("form_solicitar_vip", clear_on_submit=True):
+
+            # Mostra o nome do usuário, mas desabilitado (apenas para informação)
+            st.text_input(
+                "Usuário (para referência)",
+                value=st.session_state.get('usuario_logado', 'N/A'),
+                disabled=True
+            )
+
+            # [MUDANÇA] Caixa de texto para o email em vez de texto estático
+            email_contato = st.text_input(
+                "Seu melhor E-mail para contato*",
+                placeholder="seu.email@exemplo.com"
+            )
+
+            mensagem = st.text_area(
+                "Mensagem (Opcional)",
+                placeholder="Gostaria de saber mais sobre o acesso VIP..."
+            )
+
+            submitted = st.form_submit_button("Enviar Solicitação VIP")
+
+            if submitted:
+                # [MUDANÇA] Validação do email inserido
+                if not valid_email(email_contato):  # Reutiliza a função helper que já temos
+                    st.error("Por favor, insira um e-mail válido.")
+                elif user_uid and user_uid != 'demo-uid':
+                    try:
+                        # Salva a solicitação no Firestore com o email fornecido pelo usuário
+                        db.collection('solicitacoes_vip').add({
+                            'user_uid': user_uid,
+                            'username': st.session_state.get('usuario_logado', 'N/A'),
+                            'user_email_contato': email_contato,  # <-- Usa o email do formulário
+                            'mensagem': mensagem,
+                            'timestamp': firestore.SERVER_TIMESTAMP,
+                            'status': 'pendente'
+                        })
+                        st.success("Solicitação enviada com sucesso! Entraremos em contato pelo e-mail fornecido.")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Erro ao enviar solicitação: {e}")
+                else:
+                    st.warning("Função não disponível para modo demo ou usuário não identificado.")
+
+
+def render_vip_cta(title="✨ Recurso VIP Exclusivo",
+                   text="Esta funcionalidade está disponível apenas para membros VIP.",
+                   button_text="Quero ser VIP!",
+                   key_prefix="cta_vip"):
+    """
+    Renderiza um "anúncio" (Call to Action) padronizado para upgrade VIP.
+    """
+    with st.container(border=True):
+        st.subheader(f"⭐ {title}")
+        st.write(text)
+        st.write("Desbloqueie este e outros recursos, como histórico ilimitado, análises avançadas e mais rotinas de treino!")
+
+        # --- CORREÇÃO AQUI ---
+        # A lógica de navegação foi movida para o 'on_click'
+        # O Streamlit fará o rerun automaticamente após o on_click.
+        st.button(
+            button_text,
+            key=f"{key_prefix}_{title.replace(' ', '')}",
+            type="primary",
+            on_click=navigate_to_page,  # Chama a função de callback
+            args=("Solicitar VIP",)      # Passa o nome da página como argumento
+        )
+        # --- FIM DA CORREÇÃO ---
+
 
 def render_progresso():
     st.title("📈 Progresso")
-    hist = st.session_state.get('historico_treinos', [])
-    if not hist: st.info("Registre treinos para ver gráficos."); return
-    df = pd.DataFrame(hist)
-    df['data'] = pd.to_datetime(df['data'])
-    vol = df.groupby(df['data'].dt.date)['volume'].sum().reset_index()
-    fig = px.line(vol, x='data', y='volume', title='Volume por dia', markers=True)
-    st.plotly_chart(fig, use_container_width=True)
-    vol['rolling'] = vol['volume'].rolling(7, min_periods=1).mean()
-    if len(vol['rolling']) >= 8:
-        last, prev = vol['rolling'].iloc[-1], vol['rolling'].iloc[-8]
-        if prev > 0 and abs(last - prev) / prev < 0.05:
-            st.warning("Possível platô detectado (variação <5% nas últimas semanas).")
+    historico_completo = st.session_state.get('historico_treinos', [])
+    user_role = st.session_state.get('role', 'free')
+
+    if not historico_completo:
+        st.info("Registre treinos para ver gráficos.")
+        return
+
+    historico_filtrado = []
+    # [GATING APLICADO AQUI]
+    if user_role == 'free':
+        limite_dias_prog = 60 # Exemplo: Free vê últimos 60 dias
+        hoje_dt = datetime.now()
+        data_limite_dt = hoje_dt - timedelta(days=limite_dias_prog)
+        for record in historico_completo:
+            try:
+                data_str = record.get('data', '')
+                if isinstance(data_str, date) and not isinstance(data_str, datetime): data_record_dt = datetime.combine(data_str, datetime.min.time())
+                elif isinstance(data_str, datetime): data_record_dt = data_str
+                else: data_record_dt = datetime.fromisoformat(str(data_str).split('T')[0])
+                if data_record_dt >= data_limite_dt:
+                    historico_filtrado.append(record)
+            except: continue
+        if len(historico_completo) > len(historico_filtrado):
+            render_vip_cta(
+                title="📊 Veja seu Histórico Completo",
+                text=f"Usuários FREE têm acesso aos últimos {limite_dias_prog} dias. Membros VIP veem todo o histórico de progresso, sem limites!",
+                button_text="Desbloquear Histórico Completo",
+                key_prefix="cta_hist"
+            )
+            st.markdown("---")
+    else: # VIP ou Admin
+        historico_filtrado = historico_completo
+
+    if not historico_filtrado:
+         st.info("Nenhum treino registrado no período visível.")
+         if user_role in ['vip', 'admin']: render_prs(historico_completo) # VIP/Admin ainda vê PRs
+         return
+
+    df = pd.DataFrame(historico_filtrado)
+    try:
+         def safe_to_datetime(d):
+            if isinstance(d, datetime): return d
+            if isinstance(d, date): return datetime.combine(d, datetime.min.time())
+            try: return datetime.fromisoformat(str(d).split('T')[0])
+            except: return pd.NaT
+         df['data'] = df['data'].apply(safe_to_datetime); df = df.dropna(subset=['data'])
+    except Exception as e: st.error(f"Erro ao processar datas do histórico: {e}"); return
+
+    st.subheader("Volume Total de Treino por Dia")
+    if not df.empty and 'volume' in df.columns:
+        df['volume'] = pd.to_numeric(df['volume'], errors='coerce'); df = df.dropna(subset=['volume'])
+        if not df.empty:
+            vol = df.groupby(df['data'].dt.date)['volume'].sum().reset_index()
+            fig = px.line(vol, x='data', y='volume', title='Volume por dia', markers=True)
+            st.plotly_chart(fig, use_container_width=True)
+            vol['rolling'] = vol['volume'].rolling(7, min_periods=1).mean()
+            if len(vol['rolling']) >= 8:
+                last, prev = vol['rolling'].iloc[-1], vol['rolling'].iloc[-8]
+                if prev > 0 and abs(last - prev) / prev < 0.05:
+                    st.warning("Possível platô detectado (variação de volume <5% nas últimas semanas).")
+        else: st.info("Dados de volume insuficientes.")
+    else: st.info("Dados de volume insuficientes.")
+
+    # --- CORREÇÃO AQUI ---
+    # Chama a função de PRs para VIPs e ADMINs
+    if user_role in ['vip', 'admin']:
+        render_prs(historico_completo)
+    # --- FIM DA CORREÇÃO ---
+    else:
+        st.markdown("---")
+        render_vip_cta(
+            title="🏆 Análise de Recordes Pessoais (PRs)",
+            text="Acompanhe seus recordes pessoais nos principais exercícios e veja sua força aumentar ao longo do tempo. Esta é uma análise exclusiva para membros VIP.",
+            button_text="Desbloquear Análise de PRs",
+            key_prefix="cta_prs"
+        )
 
 
 def render_fotos():
     st.title("📸 Fotos de Progresso")
 
-    # Usar 'expanded=True' para deixar aberto por padrão, facilitando o acesso
-    with st.expander("➕ Adicionar Nova Foto", expanded=True):
-        col_upload, col_details = st.columns([1, 1]) # Dividir em duas colunas de tamanho igual
-
-        with col_upload:
-            st.markdown("##### 1. Selecione a Imagem")
-            uploaded = st.file_uploader(
-                "Arraste e solte ou clique para buscar", # Label mais interativo
-                type=['png', 'jpg', 'jpeg'],
-                label_visibility="collapsed" # Oculta o label padrão, já temos o markdown acima
-            )
-            st.caption("Formatos: PNG, JPG, JPEG. Limite: 200MB.")
-
-        # A coluna de detalhes só mostra conteúdo se uma imagem foi carregada
-        with col_details:
-            if uploaded is not None:
-                st.markdown("##### 2. Detalhes e Salvar")
-                try:
-                    img = Image.open(uploaded).convert('RGB')
-                    # Mostrar preview com largura da coluna
-                    st.image(img, caption='Preview da Imagem', use_column_width=True)
-
-                    data_foto = st.date_input("🗓️ Data da foto", datetime.now().date())
-
-                    # Tenta pegar o último peso registrado como padrão
-                    default_weight = st.session_state.get('dados_usuario', {}).get('peso', 70.0)
-                    if st.session_state.get('historico_peso'):
-                        try: default_weight = st.session_state['historico_peso'][-1]['peso']
-                        except: pass # Ignora erro se formato inesperado
-
-                    peso_foto = st.number_input("⚖️ Peso (kg) neste dia", min_value=20.0, value=float(default_weight), step=0.1)
-                    nota = st.text_area("📝 Notas / Observações (opcional)")
-
-                    if st.button("💾 Salvar foto", use_container_width=True, type="primary"):
-                        with st.spinner("Processando e salvando..."):
-                            b64 = b64_from_pil(img)
-                            fotos = st.session_state.get('fotos_progresso', [])
-                            fotos.append({'data': data_foto.isoformat(), 'peso': float(peso_foto), 'imagem': b64, 'nota': nota, 'timestamp': iso_now()})
-                            # Ordenação agora feita na exibição da galeria
-                            st.session_state['fotos_progresso'] = fotos
-                            uid = st.session_state.get('user_uid')
-                            if uid: salvar_dados_usuario_firebase(uid)
-                            st.success("Foto salva com sucesso!")
-                            time.sleep(1)
-                            st.rerun() # Limpa o uploader e atualiza a galeria
-                except Exception as e:
-                    st.error(f"Erro ao processar imagem: {e}")
-            else:
-                # Mensagem enquanto nenhuma imagem foi selecionada
-                st.info("⬅️ Selecione um arquivo para ver o preview e adicionar detalhes.")
-
-    st.markdown("---") # Separador antes da galeria
-
-    # --- Galeria de Fotos (restante da função) ---
-    st.subheader("🖼️ Galeria de Progresso")
-    # Ordena as fotos pela data mais recente aqui, antes de exibir
-    fotos = sorted(st.session_state.get('fotos_progresso', []), key=lambda x: x.get('data', ''), reverse=True)
-
-    if not fotos:
-        st.info("Nenhuma foto adicionada ainda.")
-        return # Adiciona return para clareza
-
-    # Lógica de exibição e exclusão da galeria (permanece igual)
-    for i, f in enumerate(fotos):
-        # Proteção extra caso 'imagem' não exista ou esteja corrompida
-        if 'imagem' not in f or not f['imagem']: continue
-
-        c1, c2, c3 = st.columns([1, 3, 1])
-        with c1:
+    # Seção para adicionar nova foto
+    with st.expander("➕ Adicionar Nova Foto"):
+        uploaded_file = st.file_uploader("Selecione uma imagem (PNG, JPG)", type=['png', 'jpg', 'jpeg'])
+        if uploaded_file:
             try:
-                # Usar um tamanho fixo pode ser melhor que width=140 para consistência
-                st.image(base64.b64decode(f['imagem']), width=150)
-            except Exception:
-                st.error("Erro ao carregar imagem") # Mensagem mais clara
-        with c2:
-            data_str = f.get('data', 'Data N/A')
-            peso_str = f"{f.get('peso', '?'):.1f}kg" if f.get('peso') else ""
-            st.write(f"📅 **{data_str}** ⚖️ **{peso_str}**")
-            if f.get('nota'):
-                st.caption(f"📝 {f.get('nota')}")
-        with c3:
-            if st.button("🗑️ Excluir", key=f"del_{i}", use_container_width=True):
-                confirm_delete_photo_dialog(i, st.session_state.get('user_uid'))
+                img = Image.open(uploaded_file).convert('RGB')
+                # Redimensionar para preview e para não salvar imagens gigantes
+                img.thumbnail((400, 400))
+                st.image(img, caption='Preview', width=300)
 
-    # Lógica de confirmação de exclusão (permanece igual)
-    if st.session_state.get('confirm_excluir_foto'):
-        st.warning("Deseja realmente excluir esta foto?")
-        ca, cb = st.columns(2)
-        with ca:
-            if st.button("❌ Cancelar", key="cancel_delete"): # Adiciona key para evitar conflitos
-                st.session_state['confirm_excluir_foto'] = False
-                st.session_state['foto_a_excluir'] = None
-                st.rerun()
-        with cb:
-            if st.button("✅ Confirmar exclusão", key="confirm_delete"): # Adiciona key
-                idx = st.session_state.get('foto_a_excluir')
-                # Recarrega a lista FOTOS DENTRO DA CONFIRMAÇÃO para garantir índice correto
-                fotos_atual = sorted(st.session_state.get('fotos_progresso', []), key=lambda x: x.get('data', ''), reverse=True)
-                if idx is not None and idx < len(fotos_atual):
-                    foto_para_excluir = fotos_atual.pop(idx) # Remove da lista ordenada
-                    # Encontra o item correspondente na lista original do session_state para remover
-                    lista_original = st.session_state['fotos_progresso']
-                    item_original_idx = -1
+                data_foto = st.date_input("Data da foto", date.today())  # Usa date.today()
+                # Pega o peso atual como sugestão, mas permite editar
+                peso_atual_sugerido = st.session_state.get('dados_usuario', {}).get('peso', 70.0)
+                peso_foto = st.number_input("Seu Peso (kg) nesta foto", min_value=20.0,
+                                            value=float(peso_atual_sugerido), step=0.1)
+                nota_foto = st.text_area("Notas sobre esta foto (opcional)")
+
+                if st.button("💾 Salvar Foto"):
+                    # Converte a imagem (redimensionada) para base64
+                    b64_string = b64_from_pil(img)
+                    nova_foto = {
+                        'data': data_foto.isoformat(),  # Salva data como string ISO
+                        'peso': float(peso_foto),
+                        'imagem': b64_string,
+                        'nota': nota_foto,
+                        'timestamp': iso_now()  # Timestamp do upload
+                    }
+
+                    fotos_atuais = st.session_state.get('fotos_progresso', [])
+                    fotos_atuais.append(nova_foto)
+                    st.session_state['fotos_progresso'] = fotos_atuais  # Atualiza a lista na sessão
+
+                    # Salva no Firebase
+                    uid = st.session_state.get('user_uid')
+                    if uid and uid != 'demo-uid':
+                        salvar_dados_usuario_firebase(uid)
+
+                    st.success("Foto salva com sucesso!")
+                    st.rerun()  # Recarrega para mostrar a foto na galeria
+
+            except Exception as e:
+                st.error(f"Erro ao processar a imagem: {e}")
+
+    st.markdown("---")
+    st.subheader("🖼️ Galeria")
+
+    # Exibe as fotos salvas, da mais recente para a mais antiga
+    fotos_salvas = st.session_state.get('fotos_progresso', [])
+    # Ordena pela data da foto (chave 'data'), tratando como string ISO
+    fotos_ordenadas = sorted(fotos_salvas, key=lambda x: x.get('data', '1970-01-01'), reverse=True)
+
+    if not fotos_ordenadas:
+        st.info("Nenhuma foto de progresso salva ainda.")
+    else:
+        # Define quantas fotos por linha (ex: 3 ou 4)
+        fotos_por_linha = 4
+        cols = st.columns(fotos_por_linha)
+        col_idx = 0
+
+        for i, foto_data in enumerate(fotos_ordenadas):
+            with cols[col_idx % fotos_por_linha]:
+                try:
+                    # Tenta decodificar e mostrar a imagem
+                    img_display = pil_from_b64(foto_data['imagem'])
+                    st.image(img_display, caption=f"📅 {foto_data.get('data')} | ⚖️ {foto_data.get('peso')} kg",
+                             use_column_width=True)
+
+                    # Exibe a nota se houver
+                    if foto_data.get('nota'):
+                        st.caption(f"📝 {foto_data['nota']}")
+
+                    # Botão Excluir (usa o índice original 'i' na lista ordenada para exclusão)
+                    # A função confirm_delete_photo_dialog espera o índice na lista como está no session_state
+                    # Precisamos encontrar o índice original na lista NÃO ordenada
                     try:
-                       # Tenta encontrar pelo timestamp ou imagem como identificador único
-                       ts_para_excluir = foto_para_excluir.get('timestamp')
-                       if ts_para_excluir:
-                           item_original_idx = next(i for i, item in enumerate(lista_original) if item.get('timestamp') == ts_para_excluir)
-                       else: # Fallback pela imagem se timestamp não existir
-                           img_para_excluir = foto_para_excluir.get('imagem')
-                           item_original_idx = next(i for i, item in enumerate(lista_original) if item.get('imagem') == img_para_excluir)
-                    except (StopIteration, KeyError):
-                        st.error("Erro ao encontrar foto original para excluir.")
+                        original_index = fotos_salvas.index(foto_data)  # Encontra índice na lista original
+                        if st.button("🗑️ Excluir", key=f"del_foto_{i}", use_container_width=True):
+                            confirm_delete_photo_dialog(original_index, st.session_state.get('user_uid'))
+                    except ValueError:
+                        st.warning("Erro ao encontrar índice para exclusão.")  # Caso raro
 
-                    if item_original_idx != -1:
-                        del lista_original[item_original_idx]
-                        st.session_state['fotos_progresso'] = lista_original # Salva a lista modificada
-                        uid = st.session_state.get('user_uid')
-                        if uid: salvar_dados_usuario_firebase(uid)
-                        st.success("Foto excluída.")
-                    else:
-                         st.error("Não foi possível excluir a foto (item não encontrado).")
+                except Exception as e:
+                    st.error(f"Erro ao exibir foto {i}: {e}")
 
+                st.markdown("---")  # Separador entre fotos na coluna
+            col_idx += 1
+
+    # Lógica de confirmação de exclusão (caso não use st.dialog)
+    if not HAS_ST_DIALOG and st.session_state.get('confirm_excluir_foto'):
+        st.error("Deseja realmente excluir esta foto?")
+        idx_para_excluir = st.session_state.get('foto_a_excluir')  # Pega o índice original
+
+        btn_cols = st.columns(2)
+        with btn_cols[0]:
+            if st.button("✅ Confirmar exclusão", type="primary"):
+                if idx_para_excluir is not None and 0 <= idx_para_excluir < len(fotos_salvas):
+                    fotos_salvas.pop(idx_para_excluir)  # Remove pelo índice original
+                    st.session_state['fotos_progresso'] = fotos_salvas  # Atualiza
+                    uid = st.session_state.get('user_uid')
+                    if uid and uid != 'demo-uid':
+                        salvar_dados_usuario_firebase(uid)
+                    st.success("Foto excluída.")
                 else:
-                     st.error("Índice inválido para exclusão.")
-
+                    st.error("Índice inválido para exclusão.")
+                # Limpa estado de confirmação
                 st.session_state['confirm_excluir_foto'] = False
                 st.session_state['foto_a_excluir'] = None
                 st.rerun()
-
-
+        with btn_cols[1]:
+            if st.button("❌ Cancelar"):
+                st.session_state['confirm_excluir_foto'] = False
+                st.session_state['foto_a_excluir'] = None
+                st.rerun()
 def render_comparar_fotos():
     st.title("🔍 Comparar Fotos")
     fotos = st.session_state.get('fotos_progresso', [])
@@ -2023,41 +3357,77 @@ def render_metas():
                 st.rerun()
 
 
-def render_nutricao():
-    st.title("🥗 Nutrição Básica")
-    dados = st.session_state.get('dados_usuario') or {}
-    sexo = st.selectbox("Sexo", ["Masculino", "Feminino"])
-    peso = st.number_input("Peso (kg)", value=dados.get('peso', 70.0))
-    altura = st.number_input("Altura (cm)", value=dados.get('altura', 170.0))
-    idade = st.number_input("Idade", value=dados.get('idade', 25))
-    objetivo = st.selectbox("Objetivo", ["Manutenção", "Emagrecimento", "Hipertrofia"])
-    if st.button("Calcular TMB e macros"):
-        tmb = calcular_tmb(sexo, peso, altura, idade)
-        macros = sugerir_macros(tmb, objetivo, peso)
-        st.metric("TMB estimada", f"{int(tmb)} kcal/dia")
-        st.write("Sugestão de macros:", macros)
+def calcular_tmb_mifflin(sexo, peso, altura, idade) -> float:
+    """Calcula TMB (Taxa Metabólica Basal) usando a fórmula Mifflin-St Jeor."""
+    if sexo.lower() == 'masculino':
+        return (10 * peso) + (6.25 * altura) - (5 * idade) + 5
+    else:  # Feminino
+        return (10 * peso) + (6.25 * altura) - (5 * idade) - 161
 
 
-def calcular_tmb(sexo: str, peso: float, altura_cm: float, idade: int) -> float:
-    if sexo.lower().startswith('m'): return 10 * peso + 6.25 * altura_cm - 5 * idade + 5
-    return 10 * peso + 6.25 * altura_cm - 5 * idade - 161
+def get_multiplicador_atividade(nivel_atividade_str: str) -> float:
+    """Retorna o multiplicador TDEE com base no nível de atividade."""
+    niveis = {
+        'Sedentário (pouco/nenhum exercício)': 1.2,
+        'Leve (1-3 dias/semana)': 1.375,
+        'Moderado (3-5 dias/semana)': 1.55,
+        'Ativo (6-7 dias/semana)': 1.725,
+        'Muito Ativo (trabalho físico + treino)': 1.9
+    }
+    return niveis.get(nivel_atividade_str, 1.375)  # Default para 'Leve'
 
 
-def sugerir_macros(tmb: float, objetivo: str, peso_kg: float):
-    calorias = tmb * 1.55
-    if objetivo == 'Emagrecimento':
-        calorias *= 0.8
-    elif objetivo == 'Hipertrofia':
-        calorias *= 1.15
-    prote = 1.8 * peso_kg
-    prote_kcal = prote * 4
-    gord_kcal = calorias * 0.25
-    gord = gord_kcal / 9
-    carbs_kcal = calorias - (prote_kcal + gord_kcal)
-    carbs = carbs_kcal / 4 if carbs_kcal > 0 else 0
-    return {'calorias': round(calorias), 'proteina_g': round(prote, 1), 'gordura_g': round(gord, 1),
-            'carbs_g': round(carbs, 1)}
+def ajustar_calorias_objetivo(calorias_base: float, objetivo_dieta: str) -> float:
+    """Ajusta as calorias de manutenção com base no objetivo (cutting/bulking)."""
+    ajustes = {
+        'Perder Peso (Déficit de ~20%)': 0.8,
+        'Perder Peso Leve (Déficit de ~10%)': 0.9,
+        'Manter Peso (Manutenção)': 1.0,
+        'Ganhar Peso Leve (Superávit de ~10%)': 1.1,
+        'Ganhar Peso (Superávit de ~20%)': 1.2
+    }
+    return calorias_base * ajustes.get(objetivo_dieta, 1.0)  # Default para 'Manter'
 
+
+def calcular_macros_vip(calorias_totais: float, peso_kg: float) -> dict:
+    """Calcula a divisão de macros (Proteína, Gordura, Carboidrato)."""
+    # Regra: 2.0g de proteína por kg de peso
+    proteina_g = max(1.6 * peso_kg, peso_kg * 2.0)  # Mínimo de 1.6g/kg, alvo 2.0g/kg
+    proteina_kcal = proteina_g * 4
+
+    # Regra: 0.8g de gordura por kg de peso
+    gordura_g = max(0.6 * peso_kg, peso_kg * 0.8)  # Mínimo 0.6g/kg, alvo 0.8g/kg
+    gordura_kcal = gordura_g * 9
+
+    # Restante das calorias vem dos carboidratos
+    carboidratos_kcal = calorias_totais - proteina_kcal - gordura_kcal
+    if carboidratos_kcal < 0:  # Caso de déficit calórico extremo
+        carboidratos_kcal = 0
+    carboidratos_g = carboidratos_kcal / 4
+
+    return {'proteina_g': round(proteina_g), 'gordura_g': round(gordura_g), 'carboidratos_g': round(carboidratos_g)}
+
+
+def distribuir_refeicoes(macros: dict, num_refeicoes: int) -> pd.DataFrame:
+    """Gera uma tabela de sugestão de divisão de macros por refeição."""
+    if num_refeicoes <= 0: return pd.DataFrame()
+
+    p_por_refeicao = round(macros['proteina_g'] / num_refeicoes)
+    g_por_refeicao = round(macros['gordura_g'] / num_refeicoes)
+    c_por_refeicao = round(macros['carboidratos_g'] / num_refeicoes)
+    kcal_por_refeicao = (p_por_refeicao * 4) + (g_por_refeicao * 9) + (c_por_refeicao * 4)
+
+    refeicoes = []
+    for i in range(1, num_refeicoes + 1):
+        refeicoes.append({
+            "Refeição": f"Refeição {i}",
+            "Proteína (g)": p_por_refeicao,
+            "Gordura (g)": g_por_refeicao,
+            "Carboidratos (g)": c_por_refeicao,
+            "Calorias (kcal)": kcal_por_refeicao
+        })
+
+    return pd.DataFrame(refeicoes)
 
 def render_busca():
     st.title("🔎 Busca")
@@ -2143,62 +3513,12 @@ def render_export_backup():
             st.session_state.confirm_reset = True
             st.rerun()
 
-
-def render_admin_panel():
-    st.title("👑 Painel Admin")
-    st.warning("Use com cuidado — ações afetam usuários reais.")
-    try:
-        users = list(db.collection('usuarios').stream())
-    except Exception:
-        st.error("Erro ao listar usuários."); return
-    st.write(f"Total usuários: {len(users)}")
-    for u in users:
-        d = u.to_dict()
-        nome = d.get('username', (d.get('dados_usuario') or {}).get('nome', '-'))
-        st.write(f"- {nome} ({u.id}) - treinos: {len(d.get('frequencia', []))} - role: {d.get('role')}")
-        c1, c2, c3 = st.columns([3, 1, 1])
-        with c1:
-            if st.button("Ver dados", key=f"ver_{u.id}"): st.json(d)
-        with c2:
-            if d.get('role') != 'admin' and st.button("Promover", key=f"prom_{u.id}"):
-                db.collection('usuarios').document(u.id).update({'role': 'admin'});
-                st.success("Promovido a admin.");
-                st.rerun()
-        with c3:
-            if st.button("Excluir", key=f"del_{u.id}"):
-                st.session_state['user_to_delete'] = u.id;
-                st.session_state['confirm_delete_user'] = True;
-                st.rerun()
-    if st.session_state.get('confirm_delete_user'):
-        st.warning("Confirmar exclusão do usuário (irrevogável).")
-        ca, cb = st.columns(2)
-        with ca:
-            if st.button("✅ Confirmar exclusão"):
-                uid = st.session_state.get('user_to_delete')
-                if uid:
-                    try:
-                        try:
-                            auth.delete_user(uid)
-                        except Exception:
-                            pass
-                        db.collection('usuarios').document(uid).delete()
-                        st.success("Usuário excluído.")
-                    except Exception as e:
-                        st.error(f"Erro ao excluir: {e}")
-                st.session_state['confirm_delete_user'] = False;
-                st.session_state['user_to_delete'] = None;
-                st.rerun()
-        with cb:
-            if st.button("❌ Cancelar"):
-                st.session_state['confirm_delete_user'] = False;
-                st.session_state['user_to_delete'] = None;
-                st.rerun()
-
-
 # ---------------------------
 # Run app
 # ---------------------------
+# [MODIFICADO] Função run() para verificar o token do Hugging Face
 def run():
+    # Lógica de login (permanece a mesma)
     if not st.session_state.get('usuario_logado'):
         uid_from_cookie = cookies.get('user_uid')
         if uid_from_cookie:
@@ -2216,7 +3536,6 @@ def run():
         render_auth()
     else:
         render_main()
-
 
 if __name__ == "__main__":
     run()
