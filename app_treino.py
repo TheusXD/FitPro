@@ -984,6 +984,496 @@ EXERCICIOS_DB = {
     },
 }
 
+PREMADE_WORKOUTS_DB = {
+    # Treino 1
+    "ppl_6d_adv": {
+        "title": "Push/Pull/Legs (PPL) 6 Dias",
+        "description": "Divisão clássica PPL 2x/semana. Foco em hipertrofia e força para avançados.",
+        "image_url": "https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Push A (Peito/Ombro/Tríceps)": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Testa", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 2: Pull A (Costas/Bíceps)": [
+                {"Exercício": "Barra Fixa", "Séries": "4", "Repetições": "Falha", "Descanso": "90s"},
+                {"Exercício": "Remada Curvada com Barra", "Séries": "3", "Repetições": "6-10", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Barra", "Séries": "3", "Repetições": "8-12", "Descanso": "45s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 3: Legs A (Pernas)": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "120s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Afundo Estacionário", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "4", "Repetições": "10-15", "Descanso": "30s"},
+            ],
+            "Dia 4: Push B (Variação)": [
+                {"Exercício": "Supino Reto com Halteres", "Séries": "4", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Desenvolvimento Militar com Barra", "Séries": "3", "Repetições": "6-10", "Descanso": "60s"},
+                {"Exercício": "Mergulho nas Paralelas", "Séries": "3", "Repetições": "Falha", "Descanso": "60s"},
+                {"Exercício": "Elevação Frontal", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley com Corda", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 5: Pull B (Variação)": [
+                {"Exercício": "Levantamento Terra", "Séries": "3", "Repetições": "5", "Descanso": "120s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Face Pull", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Rosca Scott (Banco Scott)", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+            ],
+            "Dia 6: Legs B (Variação)": [
+                {"Exercício": "Agachamento Frontal", "Séries": "4", "Repetições": "8-12", "Descanso": "120s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Agachamento Búlgaro", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Panturrilha Sentado (Máquina)", "Séries": "4", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 2
+    "ul_4d_hipertrofia": {
+        "title": "Upper/Lower (Hipertrofia)",
+        "description": "Divisão de 4 dias (Superior/Inferior 2x) para frequência 2x/semana.",
+        "image_url": "https://images.pexels.com/photos/1954524/pexels-photo-1954524.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Upper A (Foco Força)": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "3", "Repetições": "6-8", "Descanso": "90s"},
+                {"Exercício": "Remada Curvada com Barra", "Séries": "3", "Repetições": "6-8", "Descanso": "90s"},
+                {"Exercício": "Desenvolvimento Militar com Barra", "Séries": "3", "Repetições": "8-10", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Barra", "Séries": "3", "Repetições": "8-10", "Descanso": "45s"},
+                {"Exercício": "Tríceps Testa", "Séries": "3", "Repetições": "8-10", "Descanso": "45s"},
+            ],
+            "Dia 2: Lower A (Foco Força)": [
+                {"Exercício": "Agachamento com Barra", "Séries": "3", "Repetições": "6-8", "Descanso": "120s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "8-10", "Descanso": "60s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "30s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "60s", "Descanso": "30s"},
+            ],
+            "Dia 3: Upper B (Foco Volume)": [
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "4", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley com Corda", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 4: Lower B (Foco Volume)": [
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "12-15", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Agachamento Búlgaro", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Panturrilha Sentado (Máquina)", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 3
+    "fullbody_3d_iniciante": {
+        "title": "Full Body 3 Dias (Iniciante)",
+        "description": "Treino de corpo inteiro 3x/semana, ideal para quem está começando.",
+        "image_url": "https://images.pexels.com/photos/3289711/pexels-photo-3289711.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Full Body A": [
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "30-60s", "Descanso": "30s"},
+            ],
+            "Dia 2: Full Body B": [
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Supino na Máquina", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Abdominal Crunch", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ],
+            "Dia 3: Full Body C": [
+                {"Exercício": "Afundo Estacionário", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "10-12/lado", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Elevação de Pernas", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 4
+    "foco_gluteo_4d": {
+        "title": "Foco em Glúteos (4 Dias)",
+        "description": "Divisão Upper/Lower com ênfase extra em glúteos e posteriores.",
+        "image_url": "https://images.pexels.com/photos/6550853/pexels-photo-6550853.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Inferiores (Foco Glúteo/Post)": [
+                {"Exercício": "Elevação Pélvica", "Séries": "4", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Agachamento Búlgaro", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 2: Superiores (Geral)": [
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "10-12/lado", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 3: Inferiores (Foco Quad/Glúteo)": [
+                {"Exercício": "Agachamento Goblet", "Séries": "4", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Cadeira Extensora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Abdução de Quadril", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+            ],
+            "Dia 4: Superiores & Core": [
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Flexão de Braço", "Séries": "3", "Repetições": "Falha", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "60s", "Descanso": "30s"},
+                {"Exercício": "Abdominal Infra (Reverso)", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 5
+    "ppl_ul_5d_interm": {
+        "title": "Intermediário 5 Dias (PPL + UL)",
+        "description": "Divisão PPL clássica (Foco Força) + 2 dias Upper/Lower (Foco Volume).",
+        "image_url": "https://images.pexels.com/photos/1552252/pexels-photo-1552252.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Push (Peito/Ombro/Tríceps)": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Tríceps Testa", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 2: Pull (Costas/Bíceps)": [
+                {"Exercício": "Barra Fixa", "Séries": "4", "Repetições": "Falha", "Descanso": "90s"},
+                {"Exercício": "Remada Curvada com Barra", "Séries": "3", "Repetições": "6-10", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Barra", "Séries": "3", "Repetições": "8-12", "Descanso": "45s"},
+                {"Exercício": "Face Pull", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+            ],
+            "Dia 3: Legs (Pernas/Core)": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "120s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "30s"},
+                {"Exercício": "Elevação de Pernas Suspenso", "Séries": "3", "Repetições": "Falha", "Descanso": "60s"},
+            ],
+            "Dia 4: Upper (Volume)": [
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "12-15", "Descanso": "60s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley com Corda", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 5: Lower (Volume/Core)": [
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "15-20", "Descanso": "60s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "12-15", "Descanso": "60s"},
+                {"Exercício": "Agachamento Búlgaro", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "Falha (max 90s)", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 6
+    "ab_4d_iniciante_split": {
+        "title": "Iniciante 4 Dias (Split A/B)",
+        "description": "Treino A/B alternado (A: Push/Core, B: Pull/Legs) para focar na base.",
+        "image_url": "https://images.pexels.com/photos/2204196/pexels-photo-2204196.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Treino A: Peito/Ombro/Tríceps + Core": [
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Abdominal Crunch", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ],
+            "Treino B: Costas/Bíceps + Pernas": [
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "10-12", "Descanso": "90s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Direta com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 7
+    "ul_4d_forca": {
+        "title": "Força Upper/Lower (4 Dias)",
+        "description": "Treino focado em progressão de carga nos exercícios compostos. Ideal para quem quer ficar mais forte.",
+        "image_url": "https://images.pexels.com/photos/116077/pexels-photo-116077.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Upper Força (Peito/Costas)": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "4", "Repetições": "4-6", "Descanso": "120s"},
+                {"Exercício": "Remada Curvada com Barra", "Séries": "4", "Repetições": "4-6", "Descanso": "120s"},
+                {"Exercício": "Desenvolvimento Militar com Barra", "Séries": "3", "Repetições": "5-8", "Descanso": "90s"},
+                {"Exercício": "Barra Fixa Supinada", "Séries": "3", "Repetições": "Falha", "Descanso": "60s"},
+            ],
+            "Dia 2: Lower Força (Pernas)": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "4-6", "Descanso": "120s-180s"},
+                {"Exercício": "Levantamento Terra Romeno", "Séries": "3", "Repetições": "6-8", "Descanso": "90s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "8-10", "Descanso": "60s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "4", "Repetições": "8-10", "Descanso": "45s"},
+            ],
+            "Dia 3: Upper Hipertrofia (Variação)": [
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "8-12/lado", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "4", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Scott (Banco Scott)", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+                {"Exercício": "Tríceps Testa", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+            ],
+            "Dia 4: Lower Hipertrofia (Variação)": [
+                {"Exercício": "Agachamento Búlgaro", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Cadeira Extensora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Panturrilha Sentado (Máquina)", "Séries": "4", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 8
+    "split_5d_peito_bracos": {
+        "title": "Avançado 5 Dias (Foco Peito/Braços)",
+        "description": "Divisão clássica 'Bro Split' com ênfase no desenvolvimento do peitoral e braços.",
+        "image_url": "https://images.pexels.com/photos/2247179/pexels-photo-2247179.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Peito": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Crucifixo na Polia (Cross Over)", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Flexão de Braço", "Séries": "2", "Repetições": "Falha", "Descanso": "60s"},
+            ],
+            "Dia 2: Costas": [
+                {"Exercício": "Levantamento Terra", "Séries": "3", "Repetições": "5-8", "Descanso": "120s"},
+                {"Exercício": "Barra Fixa", "Séries": "3", "Repetições": "Falha", "Descanso": "90s"},
+                {"Exercício": "Remada Cavalinho", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Puxada com Triângulo", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 3: Pernas": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "8-12", "Descanso": "120s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Stiff com Barra", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "4", "Repetições": "10-15", "Descanso": "30s"},
+            ],
+            "Dia 4: Ombros/Trapézio": [
+                {"Exercício": "Desenvolvimento Militar com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Elevação Lateral", "Séries": "4", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Crucifixo Inverso com Halteres", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Encolhimento com Halteres", "Séries": "4", "Repetições": "10-12", "Descanso": "45s"},
+                {"Exercício": "Face Pull", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+            ],
+            "Dia 5: Braços (Bíceps/Tríceps)": [
+                {"Exercício": "Supino Fechado", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Barra", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Tríceps Testa", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Scott (Banco Scott)", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley com Corda", "Séries": "3", "Repetições": "12-15", "Descanso": "30s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "12-15", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 9
+    "ppl_3d_interm": {
+        "title": "Push/Pull/Legs (3 Dias)",
+        "description": "A divisão PPL clássica. Frequência 1x/semana por grupo, ideal para quem tem 3 dias fixos.",
+        "image_url": "https://images.pexels.com/photos/1552249/pexels-photo-1552249.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Push (Peito/Ombro/Tríceps)": [
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 2: Pull (Costas/Bíceps)": [
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "10-12/lado", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+            ],
+            "Dia 3: Legs (Pernas/Core)": [
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "4", "Repetições": "10-15", "Descanso": "30s"},
+                {"Exercício": "Abdominal Infra (Reverso)", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 10
+    "casa_3d_iniciante": {
+        "title": "Treino em Casa (Iniciante)",
+        "description": "Treino Full Body 3x/semana usando apenas Peso Corporal e Halteres.",
+        "image_url": "https://images.pexels.com/photos/4162451/pexels-photo-4162451.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Full Body A": [
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Flexão de Braço", "Séries": "3", "Repetições": "Falha (min 5)", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "10-12/lado", "Descanso": "60s"},
+                {"Exercício": "Elevação Pélvica", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "45-60s", "Descanso": "30s"},
+            ],
+            "Dia 2: Full Body B": [
+                {"Exercício": "Afundo Estacionário", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "12-15", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Abdominal Bicicleta", "Séries": "3", "Repetições": "20-30 (total)", "Descanso": "30s"},
+            ],
+            "Dia 3: Full Body C": [
+                {"Exercício": "Agachamento com Halteres", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Flexão Inclinada", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Remada com Halteres (Ambos os Braços)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Mergulho no Banco", "Séries": "3", "Repetições": "Falha (min 8)", "Descanso": "45s"},
+                {"Exercício": "Elevação de Pernas", "Séries": "3", "Repetições": "15-20", "Descanso": "30s"},
+            ]
+        }
+    },
+    # Treino 11
+    "rapido_3d_composto": {
+        "title": "Treino Rápido (Foco Compostos)",
+        "description": "Treino Full Body 3x/semana focado apenas nos exercícios compostos. Rápido e eficaz.",
+        "image_url": "https://images.pexels.com/photos/3837464/pexels-photo-3837464.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Foco A": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Supino Reto com Halteres", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "Falha", "Descanso": "45s"},
+            ],
+            "Dia 2: Foco B": [
+                {"Exercício": "Leg Press 45°", "Séries": "4", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Elevação de Pernas", "Séries": "3", "Repetições": "Falha", "Descanso": "45s"},
+            ],
+            "Dia 3: Foco C": [
+                {"Exercício": "Stiff com Halteres", "Séries": "4", "Repetições": "8-12", "Descanso": "90s"},
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "4", "Repetições": "8-12/lado", "Descanso": "60s"},
+                {"Exercício": "Abdominal na Polia", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 12
+    "split_5d_bodybuilding": {
+        "title": "Avançado 5 Dias (Bodybuilding)",
+        "description": "Divisão clássica de bodybuilding (um grupo por dia) para máximo volume e hipertrofia.",
+        "image_url": "https://images.pexels.com/photos/2261482/pexels-photo-2261482.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Peito": [
+                {"Exercício": "Supino Inclinado com Halteres", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Crucifixo na Polia (Cross Over)", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Peck Deck (Voador)", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 2: Costas": [
+                {"Exercício": "Remada Curvada com Barra", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Pullover na Polia", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 3: Pernas": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "8-12", "Descanso": "120s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Cadeira Extensora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Panturrilha em Pé (Máquina)", "Séries": "4", "Repetições": "10-15", "Descanso": "30s"},
+            ],
+            "Dia 4: Ombros": [
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "4", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Elevação Lateral na Polia", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Crucifixo Inverso com Halteres", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Encolhimento com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "45s"},
+            ],
+            "Dia 5: Braços (Bíceps/Tríceps)": [
+                {"Exercício": "Rosca Direta com Barra W", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Tríceps Testa", "Séries": "4", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Rosca Alternada", "Séries": "3", "Repetições": "10-12/lado", "Descanso": "45s"},
+                {"Exercício": "Tríceps Pulley com Corda", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Rosca Martelo", "Séries": "3", "Repetições": "10-15", "Descanso": "45s"},
+                {"Exercício": "Tríceps Unilateral na Polia", "Séries": "3", "Repetições": "10-15/lado", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 13
+    "fullbody_2d_iniciante": {
+        "title": "Iniciante 2 Dias (Full Body)",
+        "description": "Treino de corpo inteiro 2x/semana. A melhor opção para quem tem tempo limitado.",
+        "image_url": "https://images.pexels.com/photos/1547248/pexels-photo-1547248.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Full Body A": [
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Supino na Máquina", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+                {"Exercício": "Prancha", "Séries": "3", "Repetições": "Falha (max 60s)", "Descanso": "30s"},
+            ],
+            "Dia 2: Full Body B": [
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "12-15", "Descanso": "60s"},
+                {"Exercício": "Desenvolvimento na Máquina", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Rosca Direta com Halteres", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 14
+    "fullbody_3d_forca_adv": {
+        "title": "Full Body 3 Dias (Força)",
+        "description": "Foco em progressão de carga nos 3 grandes exercícios compostos. Para avançados.",
+        "image_url": "https://images.pexels.com/photos/791763/pexels-photo-791763.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1 (Foco Agachamento)": [
+                {"Exercício": "Agachamento com Barra", "Séries": "4", "Repetições": "4-6", "Descanso": "120s"},
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "8-12/lado", "Descanso": "60s"},
+                {"Exercício": "Rosca Martelo", "Séries": "2", "Repetições": "10-15", "Descanso": "45s"},
+            ],
+            "Dia 2 (Foco Supino)": [
+                {"Exercício": "Supino Reto com Barra", "Séries": "4", "Repetições": "4-6", "Descanso": "120s"},
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "10-15", "Descanso": "60s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "8-12", "Descanso": "60s"},
+                {"Exercício": "Elevação Lateral", "Séries": "3", "Repetições": "12-15", "Descanso": "45s"},
+            ],
+            "Dia 3 (Foco Terra)": [
+                {"Exercício": "Levantamento Terra", "Séries": "3", "Repetições": "4-6", "Descanso": "120s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "6-10", "Descanso": "90s"},
+                {"Exercício": "Stiff com Halteres", "Séries": "3", "Repetições": "10-12", "Descanso": "60s"},
+                {"Exercício": "Tríceps Pulley", "Séries": "2", "Repetições": "10-15", "Descanso": "45s"},
+            ]
+        }
+    },
+    # Treino 15
+    "metabolico_3d_geral": {
+        "title": "Treino Metabólico (Condicionamento)",
+        "description": "Foco em condicionamento e queima calórica. Séries mais altas e descansos mais curtos.",
+        "image_url": "https://images.pexels.com/photos/6456303/pexels-photo-6456303.jpeg?auto=compress&cs=tinysrgb&w=600",
+        "plano": {
+            "Dia 1: Full Body A": [
+                {"Exercício": "Agachamento Goblet", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Flexão de Braço", "Séries": "3", "Repetições": "Falha", "Descanso": "45s"},
+                {"Exercício": "Remada Sentada (máquina)", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Afundo (Passada)", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "45s"},
+                {"Exercício": "Prancha Dinâmica (Mountain Climber)", "Séries": "3", "Repetições": "45s", "Descanso": "30s"},
+            ],
+            "Dia 2: Full Body B": [
+                {"Exercício": "Leg Press 45°", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Puxada Alta (Lat Pulldown)", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Desenvolvimento com Halteres (sentado)", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Mesa Flexora", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Abdominal Bicicleta", "Séries": "3", "Repetições": "45s", "Descanso": "30s"},
+            ],
+            "Dia 3: Full Body C": [
+                {"Exercício": "Elevação Pélvica", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Supino Reto com Halteres", "Séries": "3", "Repetições": "15-20", "Descanso": "45s"},
+                {"Exercício": "Remada Unilateral (Serrote)", "Séries": "3", "Repetições": "12-15/lado", "Descanso": "45s"},
+                {"Exercício": "Step Up", "Séries": "3", "Repetições": "10-12/perna", "Descanso": "45s"},
+                {"Exercício": "Russian Twist", "Séries": "3", "Repetições": "45s", "Descanso": "30s"},
+            ]
+        }
+    }
+} # <-- FIM DO DICIONÁRIO
+
+
 EXERCISE_SUBSTITUTIONS = {
     # Substituições PRINCIPALMENTE por RESTRIÇÃO
     'Agachamento com Barra': 'Leg Press 45°',
@@ -1533,58 +2023,88 @@ def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
 
 
 def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None) -> Dict:
-    nivel = dados_usuario.get('nivel', 'Iniciante')
+    nivel = dados_usuario.get('nivel', 'Iniciante')  # Iniciante ou Intermediário/Avançado
     dias = dados_usuario.get('dias_semana', 3)
     objetivo = dados_usuario.get('objetivo', 'Hipertrofia')
     restricoes_usr = dados_usuario.get('restricoes', [])
-    sexo = dados_usuario.get('sexo', 'Masculino')
+    sexo = dados_usuario.get('sexo', 'Masculino')  # Usado apenas se precisarmos de desempate fino
 
-    if fase_atual: series_base_str, reps_base, descanso_base = fase_atual['series'], fase_atual['reps'], fase_atual['descanso']
-    else:
-        if objetivo == 'Hipertrofia': series_base_str, reps_base, descanso_base = ('3-4' if nivel != 'Iniciante' else '3'), '8-12', '60-90s'
-        elif objetivo == 'Emagrecimento': series_base_str, reps_base, descanso_base = '3', '12-15', '45-60s'
-        else: series_base_str, reps_base, descanso_base = '3', '15-20', '30-45s'
+    # Define séries/reps/descanso base (agora também considerando o nível para séries)
+    if fase_atual:
+        series_base_str = fase_atual['series']  # Ex: '3-4'
+        reps_base = fase_atual['reps']
+        descanso_base = fase_atual['descanso']
+    else:  # Fallback se não houver fase (raro)
+        if objetivo == 'Hipertrofia':
+            series_base_str, reps_base, descanso_base = ('3-4' if nivel != 'Iniciante' else '3'), '8-12', '60-90s'
+        elif objetivo == 'Emagrecimento':
+            series_base_str, reps_base, descanso_base = '3', '12-15', '45-60s'
+        else:
+            series_base_str, reps_base, descanso_base = '3', '15-20', '30-45s'
 
-    series_parts = series_base_str.split('-'); series_final = series_parts[0] if nivel == 'Iniciante' else series_parts[-1]
-    if not series_final.isdigit(): series_final = '3'
+    # Determina o número de séries com base no nível e na fase/objetivo
+    series_parts = series_base_str.split('-')
+    series_final = series_parts[0] if nivel == 'Iniciante' else series_parts[-1]
+    # Garante que seja um número (caso a base seja só '3', por exemplo)
+    if not series_final.isdigit(): series_final = '3'  # Default seguro
 
-    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[Dict]:
+    # Função selecionar_exercicios (robusta, com filtros de nível, restrição e exclusão)
+    def selecionar_exercicios(grupos: List[str], n_compostos: int, n_isolados: int, excluir: List[str] = []) -> List[
+        Dict]:
         exercicios_selecionados = []
         candidatos_validos = []
+        # Filtra exercícios por grupo, nível permitido e restrições
         for ex_nome, ex_data in EXERCICIOS_DB.items():
             niveis_permitidos = ex_data.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
-            if nivel not in niveis_permitidos: continue
+            if nivel not in niveis_permitidos: continue  # Filtra por nível aqui
+
             if ex_data.get('grupo') in grupos and ex_nome not in excluir:
                 exercicio_tem_restricao = any(r in ex_data.get('restricoes', []) for r in restricoes_usr)
                 if exercicio_tem_restricao:
                     substituto = EXERCISE_SUBSTITUTIONS.get(ex_nome)
                     if substituto and substituto not in excluir:
                         sub_details = EXERCICIOS_DB.get(substituto, {})
-                        sub_niveis_permitidos = sub_details.get('niveis_permitidos', ['Iniciante', 'Intermediário/Avançado'])
-                        if nivel in sub_niveis_permitidos and substituto not in candidatos_validos and not any(r in sub_details.get('restricoes', []) for r in restricoes_usr):
+                        sub_niveis_permitidos = sub_details.get('niveis_permitidos',
+                                                                ['Iniciante', 'Intermediário/Avançado'])
+                        # Verifica nível E restrição do substituto
+                        if nivel in sub_niveis_permitidos and substituto not in candidatos_validos and not any(
+                                r in sub_details.get('restricoes', []) for r in restricoes_usr):
                             candidatos_validos.append(substituto)
+                # Adiciona original se permitido para o nível e seguro
                 elif nivel in niveis_permitidos and ex_nome not in candidatos_validos:
                     candidatos_validos.append(ex_nome)
 
-        candidatos = list(set(candidatos_validos)); random.shuffle(candidatos)
+        # Seleciona compostos e isolados da lista de válidos
+        candidatos = list(set(candidatos_validos));
+        random.shuffle(candidatos)
         compostos_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] == 'Composto']
         isolados_selecionados = [ex for ex in candidatos if EXERCICIOS_DB[ex]['tipo'] != 'Composto']
         compostos_finais = compostos_selecionados[:n_compostos]
         isolados_finais = isolados_selecionados[:n_isolados]
         exercicios_finais = compostos_finais + isolados_finais
+
         total_desejado = n_compostos + n_isolados
         if len(exercicios_finais) < total_desejado:
             faltantes = total_desejado - len(exercicios_finais)
             if len(isolados_finais) < n_isolados and len(compostos_selecionados) > len(compostos_finais):
-                 extras_c = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes]; exercicios_finais.extend(extras_c); faltantes -= len(extras_c)
-            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(isolados_finais):
-                 extras_i = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes]; exercicios_finais.extend(extras_i)
+                extras_c = [ex for ex in compostos_selecionados if ex not in exercicios_finais][:faltantes];
+                exercicios_finais.extend(extras_c);
+                faltantes -= len(extras_c)
+            if faltantes > 0 and len(compostos_finais) < n_compostos and len(isolados_selecionados) > len(
+                    isolados_finais):
+                extras_i = [ex for ex in isolados_selecionados if ex not in exercicios_finais][:faltantes];
+                exercicios_finais.extend(extras_i)
+
         exercicios_finais = exercicios_finais[:total_desejado]
+
         for ex in exercicios_finais:
-             exercicios_selecionados.append({'Exercício': ex, 'Séries': series_final, 'Repetições': reps_base, 'Descanso': descanso_base})
+            exercicios_selecionados.append(
+                {'Exercício': ex, 'Séries': series_final, 'Repetições': reps_base, 'Descanso': descanso_base})
+
         return exercicios_selecionados if exercicios_finais else []
 
-    plano = {}
+    # --- LÓGICA DE GERAÇÃO BASEADA NO DOCUMENTO ---
+    plano = {}  # Começa vazio a cada chamada
     grupos_todos = ['Pernas', 'Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Core', 'Trapézio', 'Antebraço']
     grupos_superiores = ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Trapézio', 'Antebraço']
     grupos_inferiores = ['Pernas', 'Core']
@@ -1593,68 +2113,92 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
     grupos_legs = ['Pernas']
 
     if nivel == 'Iniciante':
-        if dias == 1: plano['Treino: Full Body'] = selecionar_exercicios(grupos_todos, 3, 3) # Target: 6
+        if dias == 1:
+            plano['Treino: Full Body'] = selecionar_exercicios(grupos_todos, 3, 3)  # Target: 6
         elif dias == 2:
-            plano['Treino A: Superiores'] = selecionar_exercicios(grupos_superiores, 2, 3) # Target: 5
-            plano['Treino B: Inferiores'] = selecionar_exercicios(grupos_inferiores, 2, 2) # Target: 4
+            plano['Treino A: Superiores'] = selecionar_exercicios(grupos_superiores, 2, 3)  # Target: 5
+            plano['Treino B: Inferiores'] = selecionar_exercicios(grupos_inferiores, 2, 2)  # Target: 4
         elif dias == 3:
-            fb1 = selecionar_exercicios(grupos_todos, 3, 2) # Target: 5
+            fb1 = selecionar_exercicios(grupos_todos, 3, 2)  # Target: 5
             fb2 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1])
             fb3 = selecionar_exercicios(grupos_todos, 3, 2, excluir=[ex['Exercício'] for ex in fb1 + fb2])
-            plano['Dia 1: Full Body A'] = fb1; plano['Dia 2: Full Body B'] = fb2 if fb2 else fb1; plano['Dia 3: Full Body C'] = fb3 if fb3 else fb2 if fb2 else fb1
+            plano['Dia 1: Full Body A'] = fb1
+            plano['Dia 2: Full Body B'] = fb2 if fb2 else fb1
+            plano['Dia 3: Full Body C'] = fb3 if fb3 else fb2 if fb2 else fb1
         elif dias == 4:
-            plano['Treino A (Push+Core)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps', 'Core'], 3, 2) # Target: 5
-            plano['Treino B (Pull+Legs)'] = selecionar_exercicios(['Costas', 'Bíceps', 'Pernas'], 3, 2) # Target: 5
+            plano['Treino A (Push+Core)'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps', 'Core'], 3,
+                                                                  2)  # Target: 5
+            plano['Treino B (Pull+Legs)'] = selecionar_exercicios(['Costas', 'Bíceps', 'Pernas'], 3, 2)  # Target: 5
         elif dias == 5:
-            # --- AJUSTE AQUI para 5 exercícios ---
-            upper_a = selecionar_exercicios(grupos_superiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
-            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
-            upper_b = selecionar_exercicios(grupos_superiores, 3, 2, excluir=[ex['Exercício'] for ex in upper_a]) # Target: 5
-            lower_b = selecionar_exercicios(grupos_inferiores, 3, 2, excluir=[ex['Exercício'] for ex in lower_a]) # Target: 5
-            plano['Dia 1: Superiores A'] = upper_a; plano['Dia 2: Inferiores A'] = lower_a
-            plano['Dia 3: Superiores B'] = upper_b; plano['Dia 4: Inferiores B'] = lower_b
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)  # Target: 5
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
+            upper_b = selecionar_exercicios(grupos_superiores, 3, 2,
+                                            excluir=[ex['Exercício'] for ex in upper_a])  # Target: 5
+            lower_b = selecionar_exercicios(grupos_inferiores, 3, 2,
+                                            excluir=[ex['Exercício'] for ex in lower_a])  # Target: 5
+            plano['Dia 1: Superiores A'] = upper_a;
+            plano['Dia 2: Inferiores A'] = lower_a
+            plano['Dia 3: Superiores B'] = upper_b;
+            plano['Dia 4: Inferiores B'] = lower_b
             plano['Dia 5: Superiores A'] = upper_a
         elif dias >= 6:
-            # --- AJUSTE AQUI para 5 exercícios ---
-            abc_a = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
-            abc_b = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
-            abc_c = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
-            plano['Dia 1: Peito/Tríceps A'] = abc_a; plano['Dia 2: Costas/Bíceps A'] = abc_b; plano['Dia 3: Pernas/Ombros A'] = abc_c
-            plano['Dia 4: Peito/Tríceps B'] = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_a]) or abc_a # Target: 5
-            plano['Dia 5: Costas/Bíceps B'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2, excluir=[ex['Exercício'] for ex in abc_b]) or abc_b # Target: 5
-            plano['Dia 6: Pernas/Ombros B'] = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2, excluir=[ex['Exercício'] for ex in abc_c]) or abc_c # Target: 5
+            abc_a = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2)  # Target: 5
+            abc_b = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2)  # Target: 5
+            abc_c = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2)  # Target: 5
+            plano['Dia 1: Peito/Tríceps A'] = abc_a;
+            plano['Dia 2: Costas/Bíceps A'] = abc_b;
+            plano['Dia 3: Pernas/Ombros A'] = abc_c
+            plano['Dia 4: Peito/Tríceps B'] = selecionar_exercicios(['Peito', 'Tríceps'], 3, 2,
+                                                                    excluir=[ex['Exercício'] for ex in abc_a]) or abc_a
+            plano['Dia 5: Costas/Bíceps B'] = selecionar_exercicios(['Costas', 'Bíceps'], 3, 2,
+                                                                    excluir=[ex['Exercício'] for ex in abc_b]) or abc_b
+            plano['Dia 6: Pernas/Ombros B'] = selecionar_exercicios(['Pernas', 'Ombros'], 3, 2,
+                                                                    excluir=[ex['Exercício'] for ex in abc_c]) or abc_c
 
-    else: # Intermediário/Avançado
-        if dias == 1: plano['Treino: Full Body Intenso'] = selecionar_exercicios(grupos_todos, 4, 1) # Target: 5
+    # --- ESTE 'ELIF' É CRUCIAL (EM VEZ DE 'IF') ---
+    elif nivel == 'Intermediário/Avançado':
+        if dias == 1:
+            plano['Treino: Full Body Intenso'] = selecionar_exercicios(grupos_todos, 4, 1)  # Target: 5
         elif dias == 2:
-            plano['Treino A: Full Body Foco Força'] = selecionar_exercicios(grupos_todos, 4, 1) # Target: 5
-            plano['Treino B: Full Body Foco Volume'] = selecionar_exercicios(grupos_todos, 2, 3) # Target: 5
+            plano['Treino A: Full Body Foco Força'] = selecionar_exercicios(grupos_todos, 4, 1)  # Target: 5
+            plano['Treino B: Full Body Foco Volume'] = selecionar_exercicios(grupos_todos, 2, 3)  # Target: 5
         elif dias == 3:
-            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2) # Target: 5
-            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2) # Target: 5
-            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs + ['Core'], 3, 2) # Target: 5
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)  # Target: 5
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)  # Target: 5
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs + ['Core'], 3, 2)  # Target: 5
         elif dias == 4:
-            upper_a = selecionar_exercicios(grupos_superiores, 3, 2) # Target: 5
-            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2) # Target: 5
-            plano['Dia 1: Upper Força'] = upper_a; plano['Dia 2: Lower Força'] = lower_a
-            plano['Dia 3: Upper Volume'] = selecionar_exercicios(grupos_superiores, 2, 3, excluir=[ex['Exercício'] for ex in upper_a]) # Target: 5
-            plano['Dia 4: Lower Volume'] = selecionar_exercicios(grupos_inferiores, 2, 3, excluir=[ex['Exercício'] for ex in lower_a]) # Target: 5
+            upper_a = selecionar_exercicios(grupos_superiores, 3, 2)  # Target: 5
+            lower_a = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
+            plano['Dia 1: Upper Força'] = upper_a;
+            plano['Dia 2: Lower Força'] = lower_a
+            plano['Dia 3: Upper Volume'] = selecionar_exercicios(grupos_superiores, 2, 3,
+                                                                 excluir=[ex['Exercício'] for ex in
+                                                                          upper_a])  # Target: 5
+            plano['Dia 4: Lower Volume'] = selecionar_exercicios(grupos_inferiores, 2, 3,
+                                                                 excluir=[ex['Exercício'] for ex in
+                                                                          lower_a])  # Target: 5
         elif dias == 5:
-            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2) # Target: 5
-            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2) # Target: 5
-            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs, 3, 2) # Target: 5
-            plano['Dia 4: Upper Leve'] = selecionar_exercicios(grupos_superiores, 2, 3) # Target: 5
-            # --- AJUSTE AQUI para 5 exercícios ---
-            plano['Dia 5: Lower/Core Leve'] = selecionar_exercicios(grupos_inferiores, 3, 2) # Alterado de (2,2) para (3,2) -> Target: 5
+            plano['Dia 1: Push'] = selecionar_exercicios(grupos_push, 3, 2)  # Target: 5
+            plano['Dia 2: Pull'] = selecionar_exercicios(grupos_pull, 3, 2)  # Target: 5
+            plano['Dia 3: Legs'] = selecionar_exercicios(grupos_legs, 3, 2)  # Target: 5
+            plano['Dia 4: Upper Leve'] = selecionar_exercicios(grupos_superiores, 2, 3)  # Target: 5
+            plano['Dia 5: Lower/Core Leve'] = selecionar_exercicios(grupos_inferiores, 3, 2)  # Target: 5
         elif dias >= 6:
-            a1 = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2) # Target: 5
-            b1 = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2) # Target: 5
-            c1 = selecionar_exercicios(['Pernas', 'Core'], 3, 2) # Target: 5
-            plano['Dia 1: Peito/Ombro/Tríceps A'] = a1; plano['Dia 2: Costas/Bíceps/Trapézio A'] = b1; plano['Dia 3: Pernas/Core A'] = c1
-            plano['Dia 4: Peito/Ombro/Tríceps B'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2, excluir=[ex['Exercício'] for ex in a1]) or a1 # Target: 5
-            plano['Dia 5: Costas/Bíceps/Trapézio B'] = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2, excluir=[ex['Exercício'] for ex in b1]) or b1 # Target: 5
-            plano['Dia 6: Pernas/Core B'] = selecionar_exercicios(['Pernas', 'Core'], 3, 2, excluir=[ex['Exercício'] for ex in c1]) or c1 # Target: 5
+            a1 = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2)  # Target: 5
+            b1 = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2)  # Target: 5
+            c1 = selecionar_exercicios(['Pernas', 'Core'], 3, 2)  # Target: 5
+            plano['Dia 1: Peito/Ombro/Tríceps A'] = a1;
+            plano['Dia 2: Costas/Bíceps/Trapézio A'] = b1;
+            plano['Dia 3: Pernas/Core A'] = c1
+            plano['Dia 4: Peito/Ombro/Tríceps B'] = selecionar_exercicios(['Peito', 'Ombros', 'Tríceps'], 3, 2,
+                                                                          excluir=[ex['Exercício'] for ex in a1]) or a1
+            plano['Dia 5: Costas/Bíceps/Trapézio B'] = selecionar_exercicios(['Costas', 'Bíceps', 'Trapézio'], 3, 2,
+                                                                             excluir=[ex['Exercício'] for ex in
+                                                                                      b1]) or b1
+            plano['Dia 6: Pernas/Core B'] = selecionar_exercicios(['Pernas', 'Core'], 3, 2,
+                                                                  excluir=[ex['Exercício'] for ex in c1]) or c1
 
+    # Formatação final
     plano_final = {}
     for nome, exercicios_lista in plano.items():
         plano_final[nome] = exercicios_lista if exercicios_lista else []
@@ -1716,7 +2260,7 @@ def render_auth():
     st.stop()
 
 
-# [COMPLETA] Função render_main com IA, VIP, e lógica de modo ativo
+# [MODIFICADO] Função render_main com a nova "Biblioteca VIP"
 def render_main():
     # Verifica os modos ativos em ordem: Warmup > Workout > Cooldown
     if st.session_state.get('warmup_in_progress', False):
@@ -1746,9 +2290,12 @@ def render_main():
         except Exception:
             pass
 
+            # --- CORREÇÃO DE SINTAXE AQUI ---
+        # Corrige o SyntaxError: invalid syntax (linha 1852)
         keys_to_delete = [k for k in st.session_state.keys() if k != 'db']
         for k in keys_to_delete:
             del st.session_state[k]
+        # --- FIM DA CORREÇÃO ---
 
         ensure_session_defaults()
         st.rerun()
@@ -1779,15 +2326,23 @@ def render_main():
         st.session_state['notificacoes'] = []
 
     # --- Navegação Principal (Selectbox) ---
+    user_role = st.session_state.get('role', 'free')
+
+    # Define a lista base de páginas
     pages = [
         "Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino",
         "Registrar Treino", "Progresso", "Fotos", "Comparar Fotos", "Medidas",
         "Planejamento Semanal", "Metas", "Nutrição", "Busca",
         "Export/Backup", "Solicitar VIP"
-    ]  # <-- "Monte seu Treino com IA" foi removido daqui
+    ]
 
-    if st.session_state.get('role') == 'admin':
-        pages.append("Admin")
+    # Adiciona a Biblioteca VIP dinamicamente
+    if user_role in ['vip', 'admin']:
+        # Insere a biblioteca depois de "Meu Treino"
+        pages.insert(5, "Biblioteca VIP")
+
+    if user_role == 'admin':
+        pages.append("Admin")  # Adiciona Admin ao final
 
     if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in pages:
         st.session_state['selected_page'] = "Dashboard"
@@ -1799,26 +2354,26 @@ def render_main():
         key='selected_page'
     )
 
-    # Mapeamento completo das páginas
+    # Mapeamento completo das páginas (incluindo as que foram "perdidas")
     page_map = {
         "Dashboard": render_dashboard,
         "Rede Social": render_rede_social,
         "Buscar Usuários": render_buscar_usuarios,
         "Questionário": render_questionario,
         "Meu Treino": render_meu_treino,
-        # "Monte seu Treino com IA": render_ai_workout, # <-- Linha removida
+        "Biblioteca VIP": render_vip_library,  # <-- Mapeamento VIP
         "Registrar Treino": render_registrar_treino,
         "Progresso": render_progresso,
-        "Fotos": render_fotos,
-        "Comparar Fotos": render_comparar_fotos,
-        "Medidas": render_medidas,
-        "Planejamento Semanal": render_planner,
-        "Metas": render_metas,
+        "Fotos": render_fotos,  # <-- Mapeamento corrigido
+        "Comparar Fotos": render_comparar_fotos,  # <-- Mapeamento corrigido
+        "Medidas": render_medidas,  # <-- Mapeamento corrigido
+        "Planejamento Semanal": render_planner,  # <-- Mapeamento corrigido
+        "Metas": render_metas,  # <-- Mapeamento corrigido
         "Nutrição": render_nutricao_gated,
-        "Busca": render_busca,
+        "Busca": render_busca,  # <-- Mapeamento corrigido
         "Export/Backup": render_export_backup,
         "Solicitar VIP": render_solicitar_vip,
-        "Admin": render_admin_panel,
+        "Admin": render_admin_panel,  # <-- Mapeamento corrigido
     }
 
     render_func = page_map.get(page, lambda: st.write("Página em desenvolvimento."))
@@ -1826,11 +2381,11 @@ def render_main():
     try:
         render_func()
     except NameError as e:
-        st.error(f"Erro: A função para asse página '{page}' não foi encontrada.")
+        # Este erro agora só aparecerá se uma função de renderização
+        # estiver *realmente* apagada do seu ficheiro.
+        st.error(f"Erro: A função para a página '{page}' não foi encontrada.")
         st.error(f"Detalhe: {e}")
-        st.code(
-            "Verifique se todas as suas funções 'render_...' (como render_fotos, render_medidas, etc.) estão definidas no seu código.")
-
+        st.code(f"Verifique se a função 'def {e.name}()' existe no seu código.")
 def render_admin_panel():
     st.title("👑 Painel Admin")
     st.warning("Use com cuidado — ações afetam usuários reais.")
@@ -1953,6 +2508,117 @@ def render_admin_panel():
             if st.button("❌ Cancelar"):
                 st.session_state['confirm_delete_user'] = False; st.session_state['user_to_delete'] = None; st.rerun()
 
+
+def render_premade_workout_viewer():
+    """Exibe o plano de treino pré-feito selecionado."""
+    workout_id = st.session_state.get('selected_premade_workout')
+    # Se, por algum motivo, o ID não for encontrado, volte
+    if not workout_id or workout_id not in PREMADE_WORKOUTS_DB:
+        st.error("Erro ao carregar o treino. Voltando à biblioteca.")
+        st.session_state.pop('selected_premade_workout', None)
+        st.rerun()
+        return
+
+    workout = PREMADE_WORKOUTS_DB[workout_id]
+
+    # Botão para voltar
+    if st.button("← Voltar para a Biblioteca"):
+        del st.session_state['selected_premade_workout']
+        st.rerun()
+        return
+
+    st.title(workout["title"])
+    st.markdown(f"_{workout['description']}_")
+    st.markdown("---")
+
+    # Reutiliza a lógica de exibição de 'render_meu_treino'
+    plano = workout['plano']
+    for nome_treino, exercicios_lista in plano.items():
+        if not exercicios_lista: continue
+
+        st.subheader(nome_treino)
+        df_treino = pd.DataFrame(exercicios_lista)
+
+        for index, row in df_treino.iterrows():
+            exercicio = row.get('Exercício', 'N/A')
+            series = row.get('Séries', 'N/A')
+            repeticoes = row.get('Repetições', 'N/A')
+            descanso = row.get('Descanso', 'N/A')
+
+            with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
+                col_media, col_instr = st.columns([1, 2])  # Proporção [1, 2]
+
+                with col_media:
+                    video_url = find_exercise_video_youtube(exercicio)
+                    if video_url:
+                        st.link_button("🎥 Assistir Execução", video_url)
+                        st.caption(f"Abre o vídeo de {exercicio} no YouTube")
+                    else:
+                        st.info("Vídeo de execução indisponível.")
+
+                with col_instr:
+                    st.markdown("##### 📋 **Instruções**")
+                    st.markdown(
+                        f"- **Séries:** `{series}`\n- **Repetições:** `{repeticoes}`\n- **Descanso:** `{descanso}`")
+
+                    ex_data = EXERCICIOS_DB.get(exercicio)
+                    if ex_data:
+                        st.markdown("---")
+                        st.write(f"**Grupo Muscular:** {ex_data.get('grupo', 'N/A')}")
+                        st.write(f"**Equipamento:** {ex_data.get('equipamento', 'N/A')}")
+                        if ex_data.get('descricao'):
+                            st.markdown("---")
+                            st.markdown(f"**📝 Como Fazer:**\n{ex_data.get('descricao')}")
+                    else:
+                        st.warning(f"Exercício '{exercicio}' não encontrado na Base de Dados. Descrição indisponível.")
+        st.markdown("---")
+
+
+def render_workout_card_grid():
+    """Exibe a grade de cards de treino pré-feitos."""
+    st.info(
+        "Explore programas de treino completos, criados por especialistas. Clique em 'Ver Plano de Treino' para ver os detalhes.")
+    st.markdown("---")
+
+    # Define o número de colunas para os cards
+    num_cols = 3
+    # Lê dinamicamente CADA item do seu banco de dados de treinos
+    workout_items = list(PREMADE_WORKOUTS_DB.items())
+
+    # Faz um loop por todos os treinos que encontrar
+    for i in range(0, len(workout_items), num_cols):
+        cols = st.columns(num_cols)
+        batch = workout_items[i:i + num_cols]  # Pega 3 treinos por vez
+
+        for j, (workout_id, workout) in enumerate(batch):
+            with cols[j]:
+                with st.container(border=True):
+                    try:
+                        # Usa 'use_container_width' (corrigido do aviso)
+                        st.image(workout["image_url"], use_container_width=True)
+                    except Exception:
+                        st.error("Imagem não pôde ser carregada.")  # Fallback
+
+                    st.subheader(workout["title"])
+                    st.caption(workout["description"])
+
+                    # Botão que define o ID do treino selecionado
+                    if st.button("Ver Plano de Treino", key=workout_id, use_container_width=True, type="primary"):
+                        st.session_state['selected_premade_workout'] = workout_id
+                        st.rerun()
+
+
+def render_vip_library():
+    """Função principal da página 'Biblioteca VIP', decide o que mostrar."""
+    st.title("📚 Biblioteca de Treinos VIP")
+
+    # Verifica se um treino foi selecionado
+    if st.session_state.get('selected_premade_workout'):
+        # Se sim, mostra a visualização detalhada do treino
+        render_premade_workout_viewer()
+    else:
+        # Se não, mostra a grade de cards para seleção
+        render_workout_card_grid()
 
 
 def render_nutricao_gated():
