@@ -61,6 +61,16 @@ except Exception:
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 
+# ================================================================
+# COLE A FUNÇÃO navigate_to_page AQUI (NÍVEL PRINCIPAL)
+# ================================================================
+def navigate_to_page(page_name):
+    """Atualiza o session_state para mudar a página no próximo rerun."""
+    st.session_state.selected_page = page_name
+    # Não precisa de st.rerun() aqui se for usada com on_click
+    # O Streamlit já faz o rerun automaticamente após o callback on_click
+# ================================================================
+
 # Suppress noisy logs
 os.environ["GRPC_VERBOSITY"] = "NONE"
 logging.getLogger("google").setLevel(logging.ERROR)
@@ -4342,11 +4352,6 @@ def render_dashboard():
     user_role = st.session_state.get('role', 'free')
     if user_role in ['vip', 'admin']:
         st.success(f"⭐ Status: {user_role.upper()}")
-
-    # ========== FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO ==========
-    def navigate_to_page(page_name):
-        st.session_state.selected_page = page_name
-        st.rerun()
 
     # ========== SEÇÃO DE BEM-ESTAR DO DIA ==========
     st.markdown("---")
