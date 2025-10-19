@@ -2646,103 +2646,106 @@ def verificar_periodizacao(num_treinos: int):
         'numero_ciclo': ciclo + 1  # Ciclo 1-based para exibição
     }
 
+
 def check_notifications_on_open():
     notifs = []
     dados = st.session_state.get('dados_usuario') or {}
-    dias_list = dados.get('dias_semana_list') or None
+    dias_list = dados.get('dias_semana_list') or None  # Usado para lembrete de treino
 
-    if dias_list and st.session_state['settings'].get('notify_on_login', True):
+    # 1. Lembrete de Treino (se habilitado e dia de treino)
+    if dias_list and st.session_state.get('settings', {}).get('notify_on_login', True):
         hoje = datetime.now().weekday()
         if hoje in dias_list:
             notifs.append({'tipo': 'lembrete_treino', 'msg': 'Hoje é dia de treino! Confira seu plano.'})
 
+    # 2. Lembrete de Metas Próximas
     for m in st.session_state.get('metas', []):
-        prazo = m.get('prazo')
-        try:
-            prazo_dt = date.fromisoformat(prazo) if isinstance(prazo, str) else prazo
-            dias = (prazo_dt - datetime.now().date()).days
-            if 0 <= dias <= 3:
-                notifs.append({'tipo': 'meta', 'msg': f"Meta '{m.get('descricao')}' vence em {dias} dia(s)."})
-        except:
-            pass
+        if m.get('status') == 'ativa':  # Considera apenas metas ativas
+            prazo = m.get('prazo')
+            try:
+                # Tenta converter prazo (pode ser string ISO ou date)
+                if isinstance(prazo, str):
+                    prazo_dt = date.fromisoformat(prazo)
+                elif isinstance(prazo, date):
+                    prazo_dt = prazo
+                else:
+                    continue  # Pula se o prazo não for válido
 
-    # ✅ LÓGICA CORRIGIDA: Periodização a cada 20 treinos
+                dias = (prazo_dt - datetime.now().date()).days
+                if 0 <= dias <= 7:  # Avisa com 7 dias de antecedência
+                    notifs.append({'tipo': 'meta', 'msg': f"Meta '{m.get('descricao')}' vence em {dias} dia(s)."})
+            except (ValueError, TypeError):
+                # Ignora prazos em formato inválido
+                print(f"Formato de prazo inválido para meta: {m.get('descricao')}")
+                pass
+
+    # 3. Lógica de Periodização (Mudança de Ciclo a cada 20 treinos)
     num_treinos = len(set(st.session_state.get('frequencia', [])))
 
     # Só verifica periodização se tiver pelo menos 1 treino
     if num_treinos > 0:
-        info = verificar_periodizacao(num_treinos)
+        info_periodizacao = verificar_periodizacao(num_treinos)  # Calcula fase atual/próxima
 
-        # ✅ CORREÇÃO: Trocar de ciclo quando for múltiplo de 20
-        # Exemplo: 20, 40, 60, 80... treinos
-        if num_treinos % 20 == 0:
+        # Verifica se é hora de mudar o ciclo (ex: 20, 40, 60 treinos)
+        if num_treinos > 0 and num_treinos % 20 == 0:
             ciclo_anterior = st.session_state.get('ciclo_atual')
-            ciclo_novo = info['numero_ciclo']
+            ciclo_novo = info_periodizacao['numero_ciclo']
 
+            # Verifica se realmente é um *novo* ciclo (evita rodar a lógica múltiplas vezes no mesmo treino)
             if ciclo_anterior != ciclo_novo:
-                # NOVO CICLO DETECTADO!
-                notifs.append({'tipo': 'nova_fase',
-                               'msg': f"👏 Novo ciclo iniciado: {info['fase_atual']['nome']} (Ciclo {ciclo_novo})"})
+
+                # ==================== MODIFICAÇÃO PRINCIPAL AQUI ====================
+                user_role = st.session_state.get('role', 'free')
+
+                # SE FOR VIP OU ADMIN: APENAS NOTIFICA
+                if user_role in ['vip', 'admin']:
+                    notifs.append({
+                        'tipo': 'nova_fase_vip',  # Novo tipo para diferenciar a notificação
+                        'msg': f"🔄 Nova Fase: {info_periodizacao['fase_atual']['nome']} (Ciclo {ciclo_novo})! Como VIP, ajuste seu plano personalizado manualmente para otimizar."
+                    })
+                    # ATENÇÃO: Não chamamos gerar_plano_personalizado nem salvar_dados_usuario_firebase aqui!
+
+                # SE FOR FREE: REGERA E SALVA O PLANO AUTOMATICAMENTE (lógica antiga)
+                else:
+                    notifs.append({
+                        'tipo': 'nova_fase',
+                        'msg': f"👏 Novo ciclo iniciado: {info_periodizacao['fase_atual']['nome']} (Ciclo {ciclo_novo})"
+                    })
+
+                    # Tenta regenerar o plano com a nova fase
+                    if dados:
+                        try:
+                            # Passa a fase atual para o gerador
+                            novo_plano = gerar_plano_personalizado(dados, info_periodizacao['fase_atual'])
+
+                            if novo_plano and verificar_plano_valido(novo_plano):  # Verifica se o plano gerado é válido
+                                st.session_state['plano_treino'] = novo_plano
+
+                                # Salva o novo plano no Firebase
+                                uid = st.session_state.get('user_uid')
+                                if uid:
+                                    salvar_dados_usuario_firebase(uid)
+                                notifs.append({
+                                    'tipo': 'plano_ajustado',
+                                    'msg': f'Seu plano foi ajustado automaticamente para a fase de {info_periodizacao["fase_atual"]["nome"]}!'
+                                })
+                            else:
+                                st.warning("Não foi possível gerar um novo plano válido para a nova fase.")
+
+                        except Exception as e:
+                            st.error(f"Erro ao regenerar plano para nova fase: {e}")
+
+                # Atualiza o número do ciclo atual na sessão (para ambos os casos)
                 st.session_state['ciclo_atual'] = ciclo_novo
+                # =====================================================================
 
-                # ✅ REGENERAR PLANO COM A NOVA FASE
-                if dados:
-                    try:
-                        novo_plano = gerar_plano_personalizado(dados, info['fase_atual'])
-                        if novo_plano:
-                            st.session_state['plano_treino'] = novo_plano
-                            # Salvar no Firebase
-                            uid = st.session_state.get('user_uid')
-                            if uid:
-                                salvar_dados_usuario_firebase(uid)
-                            notifs.append({'tipo': 'plano_ajustado',
-                                           'msg': f'Seu plano foi ajustado para a fase de {info["fase_atual"]["nome"]}!'})
-                    except Exception as e:
-                        st.error(f"Erro ao regenerar plano: {e}")
-
-    for t in (5, 10, 30, 50, 100):
+    # 4. Notificações de Conquista por Número de Treinos
+    for t in (1, 5, 10, 25, 50, 75, 100, 150, 200):  # Marcos de treino
         if num_treinos == t:
-            notifs.append({'tipo': 'conquista', 'msg': f"🎉 Você alcançou {t} treinos!"})
+            notifs.append({'tipo': 'conquista', 'msg': f"🎉 Marco alcançado: {t} treinos completados!"})
 
+    # Atualiza o estado das notificações
     st.session_state['notificacoes'] = notifs
-
-
-# ---------------------------
-# UI & Plan Generation
-# ---------------------------
-def show_logo_center():
-    st.markdown("<div style='text-align:center;'><h1>🏋️ FitPro</h1><p>Seu Personal Trainer Digital</p></div>",
-                unsafe_allow_html=True)
-# [NOVA] Função de callback para navegação (necessária para os botões VIP)
-def navigate_to_page(page_name):
-    """Atualiza o session_state para mudar a página no próximo rerun."""
-    st.session_state['selected_page'] = page_name
-
-
-def confirm_delete_photo_dialog(idx: int, uid: Optional[str]):
-    if HAS_ST_DIALOG:
-        @st.dialog("🗑️ Confirmar Exclusão")
-        def inner():
-            st.write("Deseja realmente excluir esta foto? Esta ação é irreversível.")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("❌ Cancelar"):
-                    st.rerun()
-            with c2:
-                if st.button("✅ Confirmar"):
-                    fotos = st.session_state.get('fotos_progresso', [])
-                    if 0 <= idx < len(fotos):
-                        fotos.pop(idx)
-                        st.session_state['fotos_progresso'] = fotos
-                        if uid:
-                            salvar_dados_usuario_firebase(uid)
-                        st.success("Foto excluída.")
-                        st.rerun()
-
-        inner()
-    else:
-        st.session_state['foto_a_excluir'] = idx
-        st.session_state['confirm_excluir_foto'] = True
 
 
 def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optional[Dict] = None,
@@ -3167,10 +3170,10 @@ def render_main():
     # ==========================================================
     user_uid = st.session_state.get('user_uid')
     if user_uid:
-        verificar_reset_semanal(user_uid)
+        verificar_reset_semanal(user_uid) # Verifica se precisa resetar o XP semanal
     # ==========================================================
 
-    # Verifica os modos ativos
+    # Verifica os modos ativos (Warmup, Workout, Cooldown)
     if st.session_state.get('warmup_in_progress', False):
         render_warmup_session()
         st.stop()
@@ -3181,7 +3184,7 @@ def render_main():
         render_cooldown_session()
         st.stop()
 
-    check_notifications_on_open()
+    check_notifications_on_open() # Verifica notificações (periodização, metas, etc.)
 
     # ========== HEADER PRINCIPAL ==========
     col_header1, col_header2, col_header3 = st.columns([3, 5, 2])
@@ -3207,7 +3210,7 @@ def render_main():
             # Fazer logout
             fazer_logout()
 
-            # Delay para o CookieManager
+            # Delay para o CookieManager processar a exclusão
             time.sleep(0.5)
 
             st.rerun()
@@ -3215,9 +3218,6 @@ def render_main():
     # ========== MENU DE NAVEGAÇÃO ==========
     st.markdown("---")
 
-    # ==========================================================
-    # =        MODIFICAÇÃO: ADICIONAR "RANKING" E "CONQUISTAS" =
-    # ==========================================================
     # Define a lista base de páginas
     pages = [
         "Dashboard", "Ranking", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino",
@@ -3225,29 +3225,32 @@ def render_main():
         "Planejamento Semanal", "Metas", "Nutrição", "Busca",
         "Export/Backup", "Solicitar VIP"
     ]
-    # (Opcional: Adicionar página "Minhas Conquistas" se você criá-la)
-    # ==========================================================
 
-    # Adiciona a Biblioteca VIP dinamicamente
+    # Adiciona páginas VIP/Admin dinamicamente
     user_role = st.session_state.get('role', 'free')
     if user_role in ['vip', 'admin']:
-        pages.insert(6, "Biblioteca VIP")  # Ajustar índice se necessário
+        # Adiciona as páginas VIP na ordem desejada
+        pages.insert(6, "Montar Treino VIP") # Inserido após "Meu Treino"
+        pages.insert(7, "Biblioteca VIP")   # Inserido após "Montar Treino VIP"
 
     if user_role == 'admin':
-        pages.append("Admin")
+        pages.append("Admin") # Adiciona Admin ao final
 
+    # Garante que a página selecionada seja válida
     if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in pages:
         st.session_state['selected_page'] = "Dashboard"
 
     # Chave estática para o selectbox de navegação
     nav_key = "main_nav_select"
 
+    # Callback para mudança de página
     def on_nav_change():
         selected = st.session_state.get(nav_key)
         if selected and selected in pages:
             st.session_state.selected_page = selected
             # st.rerun() # O rerun já é acionado pelo on_change
 
+    # Selectbox de Navegação
     selected_page = st.selectbox(
         "Navegação",
         pages,
@@ -3260,13 +3263,13 @@ def render_main():
     with st.expander("⚙️ Configurações", icon="⚙️"):
         col_config1, col_config2 = st.columns(2)
         with col_config1:
-            theme_key = "main_theme_select"  # <-- CHAVE ESTÁTICA
+            theme_key = "main_theme_select" # Chave estática
             theme = st.selectbox("Tema", ["light", "dark"],
                                  index=0 if st.session_state['settings'].get('theme', 'light') == 'light' else 1,
                                  key=theme_key)
             st.session_state['settings']['theme'] = theme
         with col_config2:
-            notify_key = "main_notify_check"  # <-- CHAVE ESTÁTICA
+            notify_key = "main_notify_check" # Chave estática
             notify_on_open = st.checkbox("Notificações ao abrir",
                                          value=st.session_state['settings'].get('notify_on_login', True),
                                          key=notify_key)
@@ -3274,16 +3277,16 @@ def render_main():
 
     st.markdown("---")
 
-    # ==========================================================
-    # =        MODIFICAÇÃO: ADICIONAR ROTA DO RANKING          =
-    # ==========================================================
+    # ========== RENDERIZAÇÃO DA PÁGINA SELECIONADA ==========
+    # Mapeamento atualizado com a nova página
     page_map = {
         "Dashboard": render_dashboard,
-        "Ranking": render_ranking,  # <-- NOVA ROTA
+        "Ranking": render_ranking,
         "Rede Social": render_rede_social,
         "Buscar Usuários": render_buscar_usuarios,
         "Questionário": render_questionario,
         "Meu Treino": render_meu_treino,
+        "Montar Treino VIP": render_build_workout, # <-- Nova rota adicionada
         "Biblioteca VIP": render_vip_library,
         "Registrar Treino": render_registrar_treino,
         "Progresso": render_progresso,
@@ -3298,20 +3301,204 @@ def render_main():
         "Solicitar VIP": render_solicitar_vip,
         "Admin": render_admin_panel,
     }
-    # ==========================================================
 
+    # Seleciona a função de renderização correta
     render_func = page_map.get(st.session_state.selected_page, lambda: st.write("Página em desenvolvimento."))
 
+    # Executa a renderização com tratamento de erro
     try:
         render_func()
     except Exception as e:
         st.error(f"Erro ao renderizar a página '{st.session_state.selected_page}': {e}")
         st.info("Tente recarregar a página ou voltar para o Dashboard.")
-        error_key = "main_error_btn"  # <-- CHAVE ESTÁTICA
+        error_key = "main_error_btn" # Chave estática
         if st.button("Voltar para Dashboard", key=error_key):
             st.session_state.selected_page = "Dashboard"
             st.rerun()
 
+
+# ==========================================================
+# =           INÍCIO - NOVA FUNÇÃO: MONTAR TREINO VIP      =
+# ==========================================================
+
+def render_build_workout():
+    st.title("🛠️ Montar Treino Personalizado (VIP)")
+
+    user_role = st.session_state.get('role', 'free')
+
+    # 1. Verifica se é VIP
+    if user_role not in ['vip', 'admin']:
+        render_vip_cta(
+            title="✨ Liberdade Total para VIPs!",
+            text="Crie seu próprio plano de treino do zero, escolhendo cada exercício, série, repetição e descanso. Controle total para usuários avançados.",
+            button_text="Quero Montar Meu Treino (VIP)",
+            key_prefix="cta_build"
+        )
+        return
+
+    st.info("Aqui você tem total liberdade para criar ou editar seu plano de treino.")
+
+    # Inicializa o estado do construtor se não existir
+    if 'custom_plan_builder' not in st.session_state:
+        st.session_state.custom_plan_builder = {}  # Estrutura: {'Nome Treino': [lista de dicts de exercícios]}
+
+    builder_state = st.session_state.custom_plan_builder
+
+    # --- Opções de Carregamento/Reset ---
+    col_load1, col_load2, col_load3 = st.columns(3)
+    with col_load1:
+        if st.button("📋 Carregar Plano Atual para Edição", key="build_load_current"):
+            current_plan = st.session_state.get('plano_treino', {})
+            loaded_plan = {}
+            if current_plan:
+                for name, data in current_plan.items():
+                    if isinstance(data, pd.DataFrame):
+                        # Converte DataFrame de volta para lista de dicts para edição
+                        loaded_plan[name] = data.to_dict(orient='records')
+                    elif isinstance(data, list):
+                        loaded_plan[name] = data  # Já está no formato certo
+                st.session_state.custom_plan_builder = loaded_plan
+                st.success("Plano atual carregado no editor.")
+                st.rerun()
+            else:
+                st.warning("Nenhum plano atual para carregar.")
+    with col_load2:
+        if st.button("✨ Começar do Zero (Limpar Editor)", key="build_clear"):
+            st.session_state.custom_plan_builder = {}
+            st.success("Editor limpo. Comece a adicionar dias de treino.")
+            st.rerun()
+
+    st.markdown("---")
+
+    # --- Adicionar Novo Dia de Treino ---
+    st.subheader("➕ Adicionar Novo Dia de Treino")
+    new_day_name = st.text_input("Nome do Novo Treino (ex: Treino A, Push, Pernas)", key="build_new_day_name")
+    if st.button("Adicionar Dia", key="build_add_day_btn"):
+        if new_day_name and new_day_name not in builder_state:
+            builder_state[new_day_name] = []
+            st.success(f"Dia de treino '{new_day_name}' adicionado!")
+            st.rerun()
+        elif not new_day_name:
+            st.error("Digite um nome para o dia de treino.")
+        else:
+            st.error(f"O nome '{new_day_name}' já existe.")
+
+    st.markdown("---")
+
+    # --- Editar Dias de Treino Existentes ---
+    st.subheader("✏️ Editar Treinos")
+
+    if not builder_state:
+        st.info("Nenhum dia de treino adicionado ainda.")
+    else:
+        # Pega a lista de nomes dos treinos para poder remover enquanto itera
+        workout_names = list(builder_state.keys())
+
+        for workout_name in workout_names:
+            if workout_name not in builder_state: continue  # Skip if deleted in this loop run
+
+            with st.expander(f"**{workout_name}** ({len(builder_state[workout_name])} exercícios)", expanded=True):
+
+                # Botão para deletar o dia inteiro
+                if st.button(f"🗑️ Excluir Dia '{workout_name}'", key=f"build_delete_day_{workout_name}"):
+                    del builder_state[workout_name]
+                    st.success(f"Dia '{workout_name}' excluído.")
+                    st.rerun()
+                    st.stop()  # Interrompe a renderização deste expander
+
+                st.markdown("---")
+
+                # Lista de exercícios neste dia
+                exercises_in_day = builder_state[workout_name]
+                if not exercises_in_day:
+                    st.write("Nenhum exercício adicionado a este dia ainda.")
+                else:
+                    st.write("**Exercícios:**")
+                    for index, ex_dict in enumerate(exercises_in_day):
+                        cols_ex = st.columns([4, 1, 1, 1, 1])
+                        cols_ex[0].write(f"- {ex_dict.get('Exercício', 'N/A')}")
+                        cols_ex[1].caption(f"S: {ex_dict.get('Séries', 'N/A')}")
+                        cols_ex[2].caption(f"R: {ex_dict.get('Repetições', 'N/A')}")
+                        cols_ex[3].caption(f"D: {ex_dict.get('Descanso', 'N/A')}")
+                        # Botão para excluir exercício específico
+                        if cols_ex[4].button("❌", key=f"build_delete_ex_{workout_name}_{index}",
+                                             help="Remover este exercício"):
+                            builder_state[workout_name].pop(index)
+                            st.rerun()
+                            st.stop()  # Interrompe para evitar erro de índice
+
+                st.markdown("---")
+
+                # Formulário para adicionar exercício a ESTE dia
+                st.write("**Adicionar Exercício a este Dia:**")
+                # Usar um formulário aqui evita reruns indesejados ao digitar
+                with st.form(key=f"build_form_add_ex_{workout_name}", clear_on_submit=True):
+                    all_exercises = list(EXERCICIOS_DB.keys())
+                    selected_exercise = st.selectbox(
+                        "Exercício",
+                        options=[""] + all_exercises,  # Adiciona opção vazia
+                        key=f"build_select_ex_{workout_name}",
+                        format_func=lambda x: "Selecione..." if x == "" else x
+                    )
+                    cols_sets_reps = st.columns(3)
+                    sets = cols_sets_reps[0].text_input("Séries", value="3", key=f"build_sets_{workout_name}")
+                    reps = cols_sets_reps[1].text_input("Repetições", value="8-12", key=f"build_reps_{workout_name}")
+                    rest = cols_sets_reps[2].text_input("Descanso", value="60s", key=f"build_rest_{workout_name}")
+
+                    submitted = st.form_submit_button("➕ Adicionar Exercício")
+                    if submitted:
+                        if selected_exercise and sets and reps and rest:
+                            new_exercise_dict = {
+                                'Exercício': selected_exercise,
+                                'Séries': sets,
+                                'Repetições': reps,
+                                'Descanso': rest
+                            }
+                            builder_state[workout_name].append(new_exercise_dict)
+                            st.success(f"'{selected_exercise}' adicionado a '{workout_name}'.")
+                            st.rerun()  # Atualiza a lista no expander
+                        else:
+                            st.error("Preencha todos os campos do exercício.")
+
+    st.markdown("---")
+
+    # --- Botão de Salvar ---
+    st.subheader("💾 Salvar Plano Personalizado")
+    if not builder_state:
+        st.warning("Adicione pelo menos um dia de treino e um exercício antes de salvar.")
+    else:
+        if st.button("✅ Salvar e Substituir Plano Atual", type="primary", key="build_save_plan"):
+            # Validação básica (pelo menos um exercício em algum dia)
+            has_exercises = any(len(ex_list) > 0 for ex_list in builder_state.values())
+            if not has_exercises:
+                st.error("Adicione pelo menos um exercício a um dos dias de treino antes de salvar.")
+            else:
+                try:
+                    # O builder_state já está no formato {nome: [lista_de_dicts]}
+                    # A função salvar_dados_usuario_firebase lida com isso
+                    st.session_state['plano_treino'] = builder_state
+
+                    uid = st.session_state.get('user_uid')
+                    if uid:
+                        salvar_dados_usuario_firebase(uid)  # Salva no Firebase (sobrescrevendo)
+                        st.success("🎉 Plano personalizado salvo com sucesso!")
+                        st.info("Redirecionando para 'Meu Treino'...")
+
+                        # Limpa o builder state após salvar
+                        st.session_state.custom_plan_builder = {}
+                        time.sleep(1)
+                        st.session_state.selected_page = "Meu Treino"
+                        st.rerun()
+                    else:
+                        st.error("Usuário não identificado. Não foi possível salvar.")
+
+                except Exception as e:
+                    st.error(f"Erro ao salvar o plano: {e}")
+
+
+# ==========================================================
+# =             FIM - NOVA FUNÇÃO: MONTAR TREINO VIP       =
+# ==========================================================
 
 def render_admin_panel():
     st.title("👑 Painel Admin")
