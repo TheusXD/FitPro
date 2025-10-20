@@ -71,6 +71,13 @@ def navigate_to_page(page_name):
     # O Streamlit já faz o rerun automaticamente após o callback on_click
 # ================================================================
 
+# ==================== ADICIONE ESTA FUNÇÃO DE VOLTA ====================
+def show_logo_center():
+    """Exibe o logo/título centralizado."""
+    st.markdown("<div style='text-align:center;'><h1>🏋️ FitPro</h1><p>Seu Personal Trainer Digital</p></div>",
+                unsafe_allow_html=True)
+# =======================================================================
+
 # Suppress noisy logs
 os.environ["GRPC_VERBOSITY"] = "NONE"
 logging.getLogger("google").setLevel(logging.ERROR)
