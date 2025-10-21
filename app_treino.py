@@ -671,6 +671,93 @@ if 'db' not in st.session_state:
     st.session_state['db'] = init_firebase()
 db = st.session_state['db']
 
+def update_tutorial_step(next_step: int, next_page: Optional[str] = None):
+    """Avança o tutorial e opcionalmente navega para outra página."""
+    st.session_state.tutorial_step = next_step
+    if next_page:
+        st.session_state.selected_page = next_page
+    st.rerun()
+
+def complete_tutorial():
+    """Marca o tutorial como concluído e o desativa."""
+    st.session_state.tutorial_active = False
+    st.session_state.tutorial_step = 0
+    st.session_state.tutorial_completed = True # Atualiza o estado local
+    # Salva no Firebase
+    uid = st.session_state.get('user_uid')
+    if uid:
+        try:
+            db.collection('usuarios').document(uid).update({'tutorial_completed': True})
+        except Exception as e:
+            st.error(f"Erro ao salvar conclusão do tutorial: {e}")
+    st.success("🎉 Tutorial concluído! Explore o app.")
+    st.rerun()
+
+def skip_tutorial():
+    """Pula o tutorial e o marca como concluído."""
+    st.session_state.tutorial_active = False
+    st.session_state.tutorial_step = 0
+    st.session_state.tutorial_completed = True
+    uid = st.session_state.get('user_uid')
+    if uid:
+        try:
+            db.collection('usuarios').document(uid).update({'tutorial_completed': True})
+        except Exception as e:
+            st.error(f"Erro ao salvar pulo do tutorial: {e}")
+    st.info("Tutorial pulado.")
+    st.rerun()
+
+def render_tutorial_overlay():
+    """Renderiza a caixa de informações do passo atual do tutorial."""
+    if not st.session_state.get('tutorial_active', False):
+        return # Não faz nada se o tutorial não estiver ativo
+
+    step = st.session_state.get('tutorial_step', 0)
+    current_page = st.session_state.get('selected_page', 'Dashboard')
+
+    # Define o conteúdo de cada passo
+    # Certifique-se que a variável global 'steps_content' existe
+    if 'steps_content' not in globals():
+        st.error("Erro interno: Definição dos passos do tutorial não encontrada.")
+        return # Evita erro se steps_content não for global
+
+    step_data = steps_content.get(step)
+
+    # Verifica se o passo atual corresponde à página atual OU se é o passo inicial/final
+    # Permite mostrar o passo 0 (Boas-vindas) e o último passo em qualquer página para flexibilidade
+    if not step_data or (step_data["page"] != current_page and step != 0 and step_data["next_step"] is not None):
+        # Oculta o tutorial se o usuário estiver na página errada (exceto no início/fim)
+        return
+
+    # Renderiza a caixa do tutorial
+    st.markdown("---") # Separador visual
+    container = st.container(border=True) # Usa container com borda
+    with container:
+        st.subheader(f"✨ Assistente FitPro ({step + 1}/{len(steps_content)})")
+        st.markdown(f"**{step_data['title']}**")
+        st.write(step_data["text"])
+
+        cols_buttons = st.columns([2, 1])
+        with cols_buttons[0]: # Botão Principal (Próximo/Concluir)
+            if step_data["next_step"] is not None:
+                st.button(step_data["next_button"],
+                          key=f"tutorial_next_{step}",
+                          type="primary",
+                          on_click=update_tutorial_step, # Chama a função de callback
+                          args=(step_data["next_step"], step_data["next_page"])) # Passa os argumentos
+            else: # Último passo
+                st.button(step_data["next_button"],
+                          key=f"tutorial_complete_{step}",
+                          type="primary",
+                          on_click=complete_tutorial) # Chama a função de callback
+
+        with cols_buttons[1]: # Botão Pular
+            if step_data["show_skip"]:
+                st.button("Pular Tutorial",
+                          key=f"tutorial_skip_{step}",
+                          on_click=skip_tutorial) # Chama a função de callback
+    st.markdown("---") # Separador visual
+
 
 # ---------------------------
 # Session defaults
@@ -708,7 +795,15 @@ def ensure_session_defaults():
         'timer_finished_flag': False,
         'confirm_reset': False,
         'selected_page': 'Dashboard',
-        'element_counter': 0,  # ⬅️ ADICIONE ESTA LINHA
+        'element_counter': 0,
+        'xp_total': 0,
+        'xp_semanal': 0,
+        'ultima_verificacao_semanal': None,
+        # --- CAMPOS DO TUTORIAL FALTANDO ---
+        'tutorial_active': False,
+        'tutorial_step': 0,
+        'tutorial_completed': False
+        # --- FIM DA ADIÇÃO ---
     }
 
     for k, v in defaults.items():
@@ -2278,118 +2373,147 @@ def limpar_planos_antigos_firebase(uid: str):
 
 
 def salvar_dados_usuario_firebase(uid: str):
-    if not uid or uid == 'demo-uid':
+    if not uid:
+        st.warning("Tentativa de salvar dados sem UID válido.")
         return
 
     try:
         with st.spinner("💾 Salvando dados no Firestore..."):
-            doc = db.collection('usuarios').document(uid)
+            doc_ref = db.collection('usuarios').document(uid) # Guarda a referência
 
-            # CORREÇÃO: Validação antes de salvar
+            # Validação do plano de treino antes de salvar
             plano_para_salvar = st.session_state.get('plano_treino')
-            plano_serial_valido = None
-
+            plano_serial_valido = None # Inicializa como None
+            is_plano_valid = False
             if plano_para_salvar and isinstance(plano_para_salvar, dict):
                 plano_filtrado = {}
                 for nome_treino, treino_data in plano_para_salvar.items():
-                    if treino_data is not None:
-                        # Se for DataFrame
-                        if isinstance(treino_data, pd.DataFrame):
-                            if (not treino_data.empty and
-                                    'Exercício' in treino_data.columns and
-                                    len(treino_data) > 0):
-                                plano_filtrado[nome_treino] = treino_data
+                    # Converte DataFrames para lista de dicts ANTES de salvar
+                    if isinstance(treino_data, pd.DataFrame):
+                        if verificar_dataframe_valido(treino_data):
+                            plano_filtrado[nome_treino] = treino_data.to_dict(orient='records')
+                            is_plano_valid = True
+                    # Mantém listas válidas como estão
+                    elif isinstance(treino_data, list):
+                         if len(treino_data) > 0 and all(isinstance(item, dict) and 'Exercício' in item for item in treino_data):
+                              plano_filtrado[nome_treino] = treino_data
+                              is_plano_valid = True
+                if is_plano_valid:
+                    plano_serial_valido = plano_filtrado # Agora é um dict {nome: [lista_dicts]} ou None
 
-                        # Se for lista
-                        elif isinstance(treino_data, list):
-                            if (len(treino_data) > 0 and
-                                    all(isinstance(item, dict) for item in treino_data) and
-                                    all('Exercício' in item for item in treino_data)):
-                                plano_filtrado[nome_treino] = treino_data
-
-                if plano_filtrado:
-                    plano_serial_valido = plan_to_serial(plano_filtrado)
-
-            # Prepara os outros dados
+            # Prepara os outros dados que mudam frequentemente
             freq = []
             for d in st.session_state.get('frequencia', []):
-                if isinstance(d, (date, datetime)):
-                    if isinstance(d, date) and not isinstance(d, datetime):
-                        freq.append(datetime.combine(d, datetime.min.time()))
-                    else:
-                        freq.append(d)
-                else:
-                    freq.append(d) # Assume que já está no formato correto se não for date/datetime
+                 if isinstance(d, date) and not isinstance(d, datetime):
+                     freq.append(datetime.combine(d, datetime.min.time()))
+                 elif isinstance(d, datetime): freq.append(d)
 
+            # Garante que timestamps e datas estão no formato correto para Firestore
             hist = []
             for t in st.session_state.get('historico_treinos', []):
-                copy = dict(t)
-                # Garante que a data no histórico seja datetime antes de salvar
-                if 'data' in copy:
-                    if isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
+                 copy = dict(t)
+                 if 'data' in copy:
+                     if isinstance(copy['data'], date) and not isinstance(copy['data'], datetime):
                          copy['data'] = datetime.combine(copy['data'], datetime.min.time())
-                    elif isinstance(copy['data'], str): # Tenta converter string para datetime
-                        try:
-                            copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0])
-                        except ValueError:
-                            # Se a conversão falhar, mantém como está ou define um padrão
-                             pass # Ou logar um erro, dependendo da necessidade
-                hist.append(copy)
-
+                     elif isinstance(copy['data'], str):
+                         try:
+                             copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
+                         # ==================== CORREÇÃO DE INDENTAÇÃO ====================
+                         except ValueError:
+                             pass # Mantém como string se inválido
+                         # =============================================================
+                 if 'timestamp' in copy and isinstance(copy['timestamp'], str):
+                     try:
+                         copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
+                     # ==================== CORREÇÃO DE INDENTAÇÃO ====================
+                     except ValueError:
+                          pass # Mantém como string se inválido
+                     # =============================================================
+                 hist.append(copy)
 
             metas_save = []
             for m in st.session_state.get('metas', []):
-                copy = dict(m)
-                if 'prazo' in copy and isinstance(copy['prazo'], date):
-                    copy['prazo'] = datetime.combine(copy['prazo'], datetime.min.time())
-                elif 'prazo' in copy and isinstance(copy['prazo'], str): # Converte string
+                 copy = dict(m)
+                 if 'prazo' in copy:
+                     if isinstance(copy['prazo'], date): copy['prazo'] = datetime.combine(copy['prazo'], datetime.min.time())
+                     elif isinstance(copy['prazo'], str):
+                         try:
+                             copy['prazo'] = datetime.fromisoformat(copy['prazo'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
+                         # ==================== CORREÇÃO DE INDENTAÇÃO ====================
+                         except ValueError:
+                             copy['prazo'] = None
+                         # =============================================================
+                 if 'data_criacao' in copy and isinstance(copy['data_criacao'], str):
                      try:
-                        copy['prazo'] = datetime.fromisoformat(copy['prazo'].split('T')[0])
+                         copy['data_criacao'] = datetime.fromisoformat(copy['data_criacao']).replace(tzinfo=timezone.utc) # Adiciona UTC
+                     # ==================== CORREÇÃO DE INDENTAÇÃO ====================
                      except ValueError:
-                         copy['prazo'] = None # Define como None se a string for inválida
-                metas_save.append(copy)
+                          pass
+                     # =============================================================
+                 metas_save.append(copy)
 
-            fotos_save = []
+            fotos_save = [] # Fotos já salvam data como string ISO
             for f in st.session_state.get('fotos_progresso', []):
-                copy = dict(f)
-                # Mantém a data da foto como string ISO formatada
-                if 'data' in copy and isinstance(copy['data'], date):
-                    copy['data'] = copy['data'].isoformat()
-                # Garante que 'timestamp' seja datetime
-                if 'timestamp' in copy and isinstance(copy['timestamp'], str):
+                 copy = dict(f)
+                 if 'timestamp' in copy and isinstance(copy['timestamp'], str):
                      try:
-                         copy['timestamp'] = datetime.fromisoformat(copy['timestamp'])
+                         copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
+                     # ==================== CORREÇÃO DE INDENTAÇÃO ====================
                      except ValueError:
-                         pass # Mantém como string se inválido
-                fotos_save.append(copy)
+                         pass
+                     # =============================================================
+                 fotos_save.append(copy)
 
-            payload = {
+            medidas_save = []
+            for med in st.session_state.get('medidas', []):
+                 copy = dict(med)
+                 if 'data' in copy:
+                     if isinstance(copy['data'], date) and not isinstance(copy['data'], datetime): copy['data'] = datetime.combine(copy['data'], datetime.min.time())
+                     elif isinstance(copy['data'], str):
+                         try:
+                             copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
+                         # ==================== CORREÇÃO DE INDENTAÇÃO ====================
+                         except ValueError:
+                              pass
+                         # =============================================================
+                 if 'timestamp' in copy and isinstance(copy['timestamp'], str):
+                     try:
+                         copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
+                     # ==================== CORREÇÃO DE INDENTAÇÃO ====================
+                     except ValueError:
+                          pass
+                     # =============================================================
+                 medidas_save.append(copy)
+
+
+            # Cria o payload APENAS com os campos que devem ser atualizados
+            payload_update = {
+                # Dados que mudam
                 'dados_usuario': st.session_state.get('dados_usuario'),
-                'plano_treino': plano_serial_valido,  # APENAS o plano atual válido
+                'plano_treino': plano_serial_valido, # Salva o plano serializado (ou None)
                 'frequencia': freq,
                 'historico_treinos': hist,
                 'historico_peso': st.session_state.get('historico_peso', []),
                 'metas': metas_save,
                 'fotos_progresso': fotos_save,
-                'medidas': st.session_state.get('medidas', []),
+                'medidas': medidas_save,
                 'feedbacks': st.session_state.get('feedbacks', []),
                 'ciclo_atual': st.session_state.get('ciclo_atual'),
-                'role': st.session_state.get('role'),
+                'role': st.session_state.get('role'), # Role pode mudar (Admin Panel)
                 'settings': st.session_state.get('settings', {}),
-                'ultimo_save': datetime.now(timezone.utc), # Usa UTC
-                'xp_total': st.session_state.get('xp_total', 0), # Inclui XP
-                'xp_semanal': st.session_state.get('xp_semanal', 0), # Inclui XP
-                'ultima_verificacao_semanal': st.session_state.get('ultima_verificacao_semanal') # Inclui data de reset
+                'ultimo_save': datetime.now(timezone.utc), # Sempre atualiza
+                'xp_total': st.session_state.get('xp_total', 0),
+                'xp_semanal': st.session_state.get('xp_semanal', 0),
+                'ultima_verificacao_semanal': st.session_state.get('ultima_verificacao_semanal'),
+                'tutorial_completed': st.session_state.get('tutorial_completed', False),
             }
 
-            # ==================== CORREÇÃO AQUI ====================
-            # Removemos o 'merge=True'. Agora o set vai SOBRESCREVER o documento.
-            doc.set(payload)
-            # =======================================================
+            # Usa doc_ref.update() para modificar apenas os campos no payload
+            doc_ref.update(payload_update)
             time.sleep(0.4)
 
     except Exception as e:
-        st.error("Erro ao salvar no Firestore:")
+        st.error(f"Erro ao salvar dados (update) no Firestore para UID {uid}:")
         st.error(str(e))
 
 # ---------------------------
@@ -2525,6 +2649,7 @@ def unfollow_user(follower_uid: str, followed_uid: str):
 # ---------------------------
 def criar_usuario_firebase(email: str, senha: str, nome: str) -> (bool, str):
     try:
+        # ... (verificação de email existente) ...
         try:
             _ = auth.get_user_by_email(email)
             return False, "Já existe um usuário com esse e-mail."
@@ -2533,80 +2658,95 @@ def criar_usuario_firebase(email: str, senha: str, nome: str) -> (bool, str):
 
         user = auth.create_user(email=email, password=senha, display_name=nome)
         uid = user.uid
+        print(f"DEBUG: Usuário criado no Auth com UID: {uid}")
 
-        # Define os dados do novo usuário
         user_data = {
-            'email': email, 'username': nome, 'dados_usuario': {'nome': nome},
-            'plano_treino': None, 'frequencia': [], 'historico_treinos': [],
-            'historico_peso': [], 'metas': [], 'fotos_progresso': [], 'medidas': [],
-            'feedbacks': [], 'ciclo_atual': None,
+            'email': email,
+            'username': nome,
+            'dados_usuario': {'nome': nome},
+            'plano_treino': None,
+            'frequencia': [],
+            'historico_treinos': [],
+            'historico_peso': [],
+            'metas': [],
+            'fotos_progresso': [],
+            'medidas': [],
+            'feedbacks': [],
+            'ciclo_atual': None,
             'role': 'free',
-            'password_hash': sha256(senha),
-            'data_criacao': datetime.now(timezone.utc),  # <-- CORRIGIDO
-
-            # =====================================
-            # =   ADIÇÃO PARA GAMIFICAÇÃO AQUI    =
-            # =====================================
+            'password_hash': sha256(senha), # Linha crucial
+            'data_criacao': datetime.now(timezone.utc),
             'xp_total': 0,
             'xp_semanal': 0,
-            'ultima_verificacao_semanal': datetime.now(timezone.utc)  # <-- CORRIGIDO
-            # =====================================
+            'ultima_verificacao_semanal': datetime.now(timezone.utc),
+            'tutorial_completed': False
         }
 
-        # Salva o novo usuário no Firestore
+        # ==================== ADICIONE ESTE PRINT ====================
+        # =============================================================
+
         db.collection('usuarios').document(uid).set(user_data)
+        print(f"DEBUG: Operação .set() concluída para UID: {uid}")
 
         return True, "Usuário criado com sucesso!"
+
     except Exception as e:
+        print(f"ERRO em criar_usuario_firebase: {e}")
         return False, f"Erro ao criar usuário: {e}"
 
 
 def verificar_credenciais_firebase(username_or_email: str, senha: str) -> (bool, str):
-    if username_or_email == 'demo' and senha == 'demo123':
-        st.session_state['user_uid'] = 'demo-uid'
-        st.session_state['usuario_logado'] = 'Demo'
-
-        # Carregar dados demo
-        doc = db.collection('usuarios').document('demo-uid').get()
-        if doc.exists:
-            carregar_dados_usuario_firebase('demo-uid')
-        else:
-            st.session_state['dados_usuario'] = {'nome': 'Demo', 'peso': 75, 'altura': 175,
-                                                 'nivel': 'Intermediário/Avançado', 'dias_semana': 4,
-                                                 'objetivo': 'Hipertrofia', 'restricoes': ['Lombar']}
-            st.session_state['plano_treino'] = gerar_plano_personalizado(st.session_state['dados_usuario'])
-            st.session_state['frequencia'] = []
-            st.session_state['historico_treinos'] = []
-            st.session_state['metas'] = []
-            st.session_state['fotos_progresso'] = []
-
-        return True, "Modo demo ativado."
+    # ==================== REMOÇÃO DO BLOCO DEMO ====================
+    # O bloco 'if username_or_email == 'demo'...' foi completamente removido.
+    # A função agora tenta diretamente a autenticação via Firebase.
+    # =============================================================
 
     try:
+        # Tenta buscar o usuário pelo e-mail fornecido
         user = auth.get_user_by_email(username_or_email)
         uid = user.uid
-        doc = db.collection('usuarios').document(uid).get()
+        doc_ref = db.collection('usuarios').document(uid) # Guarda a referência
+        doc = doc_ref.get()
 
         if not doc.exists:
-            return False, "Usuário sem documento no Firestore."
+            # Caso raro: usuário existe no Auth mas não no Firestore
+            return False, "Usuário autenticado, mas sem dados no Firestore."
 
         data = doc.to_dict()
         stored_hash = data.get('password_hash')
 
+        # Verifica se o hash bate
         if stored_hash and stored_hash == sha256(senha):
+            # Hash bateu, login normal
             st.session_state['user_uid'] = uid
             st.session_state['usuario_logado'] = data.get('username') or username_or_email
             carregar_dados_usuario_firebase(uid)
-
-            # ⬅️ SALVAR COOKIE É FEITO NA FUNÇÃO render_auth AGORA
             return True, f"Bem-vindo(a), {st.session_state['usuario_logado']}!"
+
+        # Lógica de atualização pós-reset (se hash estiver faltando)
+        # (Mantendo a lógica de atualização que implementamos, caso você a tenha nesta versão)
+        elif not stored_hash:
+             try:
+                 new_hash_update = sha256(senha)
+                 doc_ref.update({'password_hash': new_hash_update})
+                 # Prossegue com o login
+                 st.session_state['user_uid'] = uid
+                 st.session_state['usuario_logado'] = data.get('username') or username_or_email
+                 carregar_dados_usuario_firebase(uid)
+                 st.info("Hash de senha atualizado após redefinição.") # Mensagem opcional
+                 return True, f"Bem-vindo(a), {st.session_state['usuario_logado']}!"
+             except Exception as update_err:
+                 st.error(f"Erro ao atualizar hash após reset: {update_err}")
+                 return False, "Erro ao finalizar redefinição de senha."
         else:
+            # O hash existe mas não bateu
             return False, "Senha incorreta."
 
     except auth.UserNotFoundError:
         return False, "Usuário não encontrado."
     except Exception as e:
-        return False, f"Erro ao autenticar: {e}"
+        st.error(f"Erro inesperado durante a autenticação: {e}") # Log mais detalhado
+        return False, f"Erro ao autenticar. Tente novamente mais tarde."
 
 
 
@@ -3043,103 +3183,80 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
 # Pages
 # ---------------------------
 def render_auth():
-    # VERIFICAR SE JÁ EXISTE USUÁRIO LOGADO NOS COOKIES
+    # VERIFICAR SE JÁ EXISTE USUÁRIO LOGADO NOS COOKIES (lógica existente mantida)
     user_uid_from_cookie = cookies.get('user_uid')
-
-    if user_uid_from_cookie and user_uid_from_cookie != "":  # ⬅️ VERIFICA SE TEM COOKIE VÁLIDO
+    if user_uid_from_cookie and user_uid_from_cookie != "":
         try:
-            # Tentar carregar os dados do usuário do cookie
             st.session_state['user_uid'] = user_uid_from_cookie
             doc = db.collection('usuarios').document(user_uid_from_cookie).get()
-
             if doc.exists:
                 data = doc.to_dict()
                 st.session_state['usuario_logado'] = data.get('username') or data.get('email', 'Usuário')
-                st.session_state['dados_usuario'] = data.get('dados_usuario', {})
-                st.session_state['role'] = data.get('role', 'free')
-
-                # Carregar outros dados
                 carregar_dados_usuario_firebase(user_uid_from_cookie)
-
                 st.success(f"👋 Bem-vindo de volta, {st.session_state['usuario_logado']}!")
-                st.rerun()
-                return
+                st.rerun(); return
+            else:
+                 cookies['user_uid'] = ""; cookies.save() # Limpa cookie inválido
         except Exception as e:
-            # Se der erro ao carregar do cookie, continuar com login normal
-            print(f"Erro ao carregar do cookie: {e}")
-            pass
+            print(f"Erro ao carregar do cookie (limpando): {e}")
+            cookies['user_uid'] = ""; cookies.save()
+            pass # Continua para a tela de login
 
-    # SE NÃO TEM COOKIE VÁLIDO, MOSTRAR TELA DE LOGIN NORMAL
-    show_logo_center()
+    # Exibe o logo
+    st.markdown("<div style='text-align:center;'><h1>🏋️ FitPro</h1><p>Seu Personal Trainer Digital</p></div>", unsafe_allow_html=True)
     st.markdown("---")
+
+    # ==================== REMOÇÃO DO BLOCO DE RESET ====================
+    # O bloco 'if st.session_state.get('show_reset_form', False):'
+    # e todo o seu conteúdo (formulário de reset e botão voltar) foram removidos.
+    # A função agora vai direto para as abas de Login/Cadastro.
+    # ===================================================================
 
     tab_login, tab_cad = st.tabs(["🔑 Login", "📝 Cadastro"])
 
     with tab_login:
         with st.form("form_login"):
-            username = st.text_input("E-mail ou 'demo'")
+            username = st.text_input("E-mail") # Sem menção a 'demo'
             senha = st.text_input("Senha", type='password')
-            lembrar = st.checkbox("Lembrar-me", value=True)  # ⬅️ OPÇÃO DE LEMBRAR LOGIN
+            lembrar = st.checkbox("Lembrar-me", value=True)
 
-            col1, col2 = st.columns([3, 1])
-            with col2:
-                if st.form_submit_button("👁️ Modo Demo"):
-                    ok, msg = verificar_credenciais_firebase('demo', 'demo123')
-                    if ok:
-                        # Salvar cookie para demo também
-                        cookies['user_uid'] = 'demo-uid'
-                        cookies.save()
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
-
-            if st.form_submit_button("Entrar"):
-                if not username or not senha:
-                    st.error("Preencha username e senha.")
+            if st.form_submit_button("Entrar", use_container_width=True):
+                if not username or not senha: st.error("Preencha e-mail e senha.")
                 else:
                     ok, msg = verificar_credenciais_firebase(username.strip(), senha)
                     if ok:
-                        # SALVAR COOKIE SE O USUÁRIO QUISER LEMBRAR
-                        if lembrar:
-                            cookies['user_uid'] = st.session_state.get('user_uid', '')
-                            cookies.save()
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+                        if lembrar: cookies['user_uid'] = st.session_state.get('user_uid', ''); cookies.save()
+                        st.success(msg); st.rerun()
+                    else: st.error(msg)
+
+        # ==================== REMOÇÃO DO BOTÃO "ESQUECI SENHA" ====================
+        # O botão que ativava o formulário de reset foi removido daqui.
+        # if st.button("Esqueci minha senha", key="show_reset_button"):
+        #     st.session_state.show_reset_form = True; st.rerun()
+        # ========================================================================
 
     with tab_cad:
+        # ... (O formulário de cadastro permanece o mesmo) ...
         with st.form("form_cadastro"):
             nome = st.text_input("Nome completo")
             email = st.text_input("E-mail")
             senha = st.text_input("Senha", type='password')
             senha_conf = st.text_input("Confirmar senha", type='password')
             termos = st.checkbox("Aceito os Termos de Uso")
-
             if st.form_submit_button("Criar Conta"):
-                if not nome or len(nome.strip()) < 3:
-                    st.error("Nome mínimo 3 caracteres.")
-                elif not valid_email(email):
-                    st.error("E-mail inválido.")
-                elif len(senha) < 6:
-                    st.error("Senha mínimo 6 caracteres.")
-                elif senha != senha_conf:
-                    st.error("Senhas não coincidem.")
-                elif not termos:
-                    st.error("Aceite os termos.")
+                if not nome or len(nome.strip()) < 3: st.error("Nome mínimo 3 caracteres.")
+                elif not valid_email(email): st.error("E-mail inválido.")
+                elif len(senha) < 6: st.error("Senha mínimo 6 caracteres.")
+                elif senha != senha_conf: st.error("Senhas não coincidem.")
+                elif not termos: st.error("Aceite os termos.")
                 else:
                     ok, msg = criar_usuario_firebase(email.strip(), senha, nome.strip())
                     if ok:
-                        # Salvar cookie automaticamente para novos usuários
-                        cookies['user_uid'] = st.session_state.get('user_uid', '')
-                        cookies.save()
-                        st.success(msg)
-                        st.info("Faça login agora.")
+                        st.success(msg + " Faça login agora.")
                     else:
                         st.error(msg)
 
-    st.stop()
+    st.stop() # Mantém o stop
 
 
 def fazer_logout():
@@ -3182,26 +3299,34 @@ def render_main():
         render_auth()
         st.stop()
 
-    # ==========================================================
-    # =        MODIFICAÇÃO: CHAMAR O RESET SEMANAL             =
-    # ==========================================================
-    user_uid = st.session_state.get('user_uid')
-    if user_uid:
-        verificar_reset_semanal(user_uid) # Verifica se precisa resetar o XP semanal
-    # ==========================================================
+    user_uid = st.session_state.get('user_uid')  # Pega o UID aqui
+
+    # Chama o reset semanal do XP (se a função existir)
+    if 'verificar_reset_semanal' in globals() and user_uid:
+        verificar_reset_semanal(user_uid)
+
+    # ==================== ATIVAÇÃO DO TUTORIAL ====================
+    if not st.session_state.get('tutorial_completed', True) and \
+            not st.session_state.get('tutorial_active', False) and \
+            st.session_state.get('tutorial_step', 0) == 0 and \
+            'dados_usuario' in st.session_state:
+        st.session_state.tutorial_active = True
+        st.info("Iniciando o tour guiado...")
+        time.sleep(1)
+        st.rerun()
+    # ======================================================================
 
     # Verifica os modos ativos (Warmup, Workout, Cooldown)
-    if st.session_state.get('warmup_in_progress', False):
-        render_warmup_session()
-        st.stop()
-    elif st.session_state.get('workout_in_progress', False):
-        render_workout_session()
-        st.stop()
-    elif st.session_state.get('cooldown_in_progress', False):
-        render_cooldown_session()
-        st.stop()
+    if 'render_warmup_session' in globals() and st.session_state.get('warmup_in_progress',
+                                                                     False): render_warmup_session(); st.stop()
+    if 'render_workout_session' in globals() and st.session_state.get('workout_in_progress',
+                                                                      False): render_workout_session(); st.stop()
+    if 'render_cooldown_session' in globals() and st.session_state.get('cooldown_in_progress',
+                                                                       False): render_cooldown_session(); st.stop()
 
-    check_notifications_on_open() # Verifica notificações (periodização, metas, etc.)
+    # Só verifica notificações se o tutorial não estiver ativo
+    if 'check_notifications_on_open' in globals() and not st.session_state.get('tutorial_active', False):
+        check_notifications_on_open()
 
     # ========== HEADER PRINCIPAL ==========
     col_header1, col_header2, col_header3 = st.columns([3, 5, 2])
@@ -3209,102 +3334,146 @@ def render_main():
     with col_header1:
         st.markdown("<h1 style='margin: 0;'>🏋️ FitPro</h1>", unsafe_allow_html=True)
         st.caption(f"👤 {st.session_state.get('usuario_logado')}")
-
         user_role = st.session_state.get('role', 'free')
         if user_role in ['admin', 'vip']:
             st.success(f"⭐ {user_role.upper()}", icon="⭐")
 
     with col_header3:
         st.write("")  # Espaçamento
-
-        # Botão de sair com CHAVE ESTÁTICA
+        # ==================== CHAVE ESTÁTICA ====================
         if st.button("🚪 Sair", use_container_width=True, key="main_btn_sair"):
-            # Salvar dados antes de sair
-            uid = st.session_state.get('user_uid')
-            if uid and uid != 'demo-uid':
-                salvar_dados_usuario_firebase(uid)
-
-            # Fazer logout
-            fazer_logout()
-
-            # Delay para o CookieManager processar a exclusão
-            time.sleep(0.5)
-
+            # =======================================================
+            if user_uid:
+                salvar_dados_usuario_firebase(user_uid)
+            fazer_logout();
+            time.sleep(0.5);
             st.rerun()
 
     # ========== MENU DE NAVEGAÇÃO ==========
     st.markdown("---")
 
-    # Define a lista base de páginas
+    # Define a lista base de páginas (adapte às suas funções)
     pages = [
-        "Dashboard", "Ranking", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino",
+        "Dashboard", "Rede Social", "Buscar Usuários", "Questionário", "Meu Treino",
         "Registrar Treino", "Progresso", "Fotos", "Comparar Fotos", "Medidas",
         "Planejamento Semanal", "Metas", "Nutrição", "Busca",
         "Export/Backup", "Solicitar VIP"
     ]
-
     # Adiciona páginas VIP/Admin dinamicamente
     user_role = st.session_state.get('role', 'free')
     if user_role in ['vip', 'admin']:
-        # Adiciona as páginas VIP na ordem desejada
-        pages.insert(6, "Montar Treino VIP") # Inserido após "Meu Treino"
-        pages.insert(7, "Biblioteca VIP")   # Inserido após "Montar Treino VIP"
-
+        if "render_build_workout" in globals(): pages.insert(6, "Montar Treino VIP")
+        if "render_vip_library" in globals(): pages.insert(7, "Biblioteca VIP")
     if user_role == 'admin':
-        pages.append("Admin") # Adiciona Admin ao final
+        if "render_admin_panel" in globals(): pages.append("Admin")
+    # Adiciona Ranking se existir
+    if "render_ranking" in globals(): pages.insert(1, "Ranking")
 
-    # Garante que a página selecionada seja válida
     if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in pages:
         st.session_state['selected_page'] = "Dashboard"
 
-    # Chave estática para o selectbox de navegação
+    # ==================== CHAVE ESTÁTICA ====================
     nav_key = "main_nav_select"
 
-    # Callback para mudança de página
+    # =======================================================
+
     def on_nav_change():
         selected = st.session_state.get(nav_key)
         if selected and selected in pages:
+            if st.session_state.get('tutorial_active', False):
+                # Lógica para impedir navegação durante tutorial (precisa de 'steps_content' global)
+                pass
             st.session_state.selected_page = selected
-            # st.rerun() # O rerun já é acionado pelo on_change
+            # st.rerun() # Desnecessário com on_change
 
-    # Selectbox de Navegação
     selected_page = st.selectbox(
-        "Navegação",
-        pages,
+        "Navegação", pages,
         index=pages.index(st.session_state['selected_page']),
         key=nav_key,
-        on_change=on_nav_change
+        on_change=on_nav_change,
+        disabled=st.session_state.get('tutorial_active', False)  # Desabilita se tutorial ativo
     )
 
-    # ========== CONFIGURAÇÕES ==========
+    # ========== CONFIGURAÇÕES (COM ALTERAR SENHA) ==========
     with st.expander("⚙️ Configurações", icon="⚙️"):
         col_config1, col_config2 = st.columns(2)
-        with col_config1:
-            theme_key = "main_theme_select" # Chave estática
+        with col_config1:  # Tema
+            # ==================== CHAVE ESTÁTICA ====================
+            theme_key = "main_theme_select"
+            # =======================================================
             theme = st.selectbox("Tema", ["light", "dark"],
                                  index=0 if st.session_state['settings'].get('theme', 'light') == 'light' else 1,
                                  key=theme_key)
             st.session_state['settings']['theme'] = theme
-        with col_config2:
-            notify_key = "main_notify_check" # Chave estática
+        with col_config2:  # Notificações
+            # ==================== CHAVE ESTÁTICA ====================
+            notify_key = "main_notify_check"
+            # =======================================================
             notify_on_open = st.checkbox("Notificações ao abrir",
                                          value=st.session_state['settings'].get('notify_on_login', True),
                                          key=notify_key)
             st.session_state['settings']['notify_on_login'] = notify_on_open
 
+        # Botão para reiniciar tutorial (se você tiver essa função)
+        if "render_tutorial_overlay" in globals():
+            st.markdown("---")
+            if st.button("❓ Rever Tutorial Guiado", key="main_restart_tutorial"):
+                if st.session_state.get('tutorial_active', False):
+                    st.warning("Termine ou pule o tutorial atual primeiro.")
+                else:
+                    st.session_state.tutorial_active = True; st.session_state.tutorial_step = 0; st.session_state.selected_page = "Dashboard"; st.rerun()
+
+        # ==================== SEÇÃO: ALTERAR SENHA ====================
+        st.markdown("---")
+        st.subheader("🔒 Alterar Senha")
+        if user_uid:
+            with st.form("form_change_password", clear_on_submit=True):
+                current_password = st.text_input("Senha Atual", type="password", key="change_pass_current")
+                new_password = st.text_input("Nova Senha", type="password", key="change_pass_new")
+                confirm_password = st.text_input("Confirmar Nova Senha", type="password", key="change_pass_confirm")
+                submitted_change = st.form_submit_button("Alterar Senha")
+
+                if submitted_change:
+                    if not current_password or not new_password or not confirm_password:
+                        st.error("Preencha todos os campos.")
+                    elif new_password != confirm_password:
+                        st.error("A nova senha e a confirmação não coincidem.")
+                    elif len(new_password) < 6:
+                        st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                    else:
+                        try:
+                            user_doc = db.collection('usuarios').document(user_uid).get()
+                            if not user_doc.exists:
+                                st.error("Erro: Dados do usuário não encontrados.")
+                            else:
+                                user_data = user_doc.to_dict()
+                                stored_hash = user_data.get('password_hash')
+                                if stored_hash and stored_hash == sha256(current_password):
+                                    try:
+                                        auth.update_user(user_uid, password=new_password)
+                                        new_hash = sha256(new_password)
+                                        db.collection('usuarios').document(user_uid).update({'password_hash': new_hash})
+                                        st.success("✅ Senha alterada com sucesso!")
+                                    except Exception as auth_error:
+                                        st.error(f"Erro ao atualizar a senha no Firebase Auth: {auth_error}")
+                                else:
+                                    st.error("Senha atual incorreta ou hash não encontrado no banco de dados.")
+                        except Exception as db_error:
+                            st.error(f"Erro ao verificar a senha atual no Firestore: {db_error}")
+        else:
+            st.warning("Não foi possível identificar o usuário para alterar a senha.")
+        # =====================================================================
+
     st.markdown("---")
 
     # ========== RENDERIZAÇÃO DA PÁGINA SELECIONADA ==========
-    # Mapeamento atualizado com a nova página
+    # Adapte este mapeamento às funções que REALMENTE existem na sua versão
     page_map = {
         "Dashboard": render_dashboard,
-        "Ranking": render_ranking,
         "Rede Social": render_rede_social,
         "Buscar Usuários": render_buscar_usuarios,
         "Questionário": render_questionario,
         "Meu Treino": render_meu_treino,
-        "Montar Treino VIP": render_build_workout, # <-- Nova rota adicionada
-        "Biblioteca VIP": render_vip_library,
         "Registrar Treino": render_registrar_treino,
         "Progresso": render_progresso,
         "Fotos": render_fotos,
@@ -3316,23 +3485,98 @@ def render_main():
         "Busca": render_busca,
         "Export/Backup": render_export_backup,
         "Solicitar VIP": render_solicitar_vip,
-        "Admin": render_admin_panel,
     }
+    # Adiciona páginas dinamicamente se as funções existirem
+    if "render_ranking" in globals(): page_map["Ranking"] = render_ranking
+    if "render_build_workout" in globals() and user_role in ['vip', 'admin']: page_map[
+        "Montar Treino VIP"] = render_build_workout
+    if "render_vip_library" in globals() and user_role in ['vip', 'admin']: page_map[
+        "Biblioteca VIP"] = render_vip_library
+    if "render_admin_panel" in globals() and user_role == 'admin': page_map["Admin"] = render_admin_panel
 
-    # Seleciona a função de renderização correta
-    render_func = page_map.get(st.session_state.selected_page, lambda: st.write("Página em desenvolvimento."))
+    render_func = page_map.get(st.session_state.selected_page,
+                               lambda: st.write(f"Página '{st.session_state.selected_page}' não encontrada."))
 
-    # Executa a renderização com tratamento de erro
     try:
         render_func()
     except Exception as e:
         st.error(f"Erro ao renderizar a página '{st.session_state.selected_page}': {e}")
         st.info("Tente recarregar a página ou voltar para o Dashboard.")
-        error_key = "main_error_btn" # Chave estática
-        if st.button("Voltar para Dashboard", key=error_key):
-            st.session_state.selected_page = "Dashboard"
-            st.rerun()
+        # ==================== CHAVE ESTÁTICA ====================
+        error_key = "main_error_btn"
+        # =======================================================
+        if st.button("Voltar para Dashboard", key=error_key): st.session_state.selected_page = "Dashboard"; st.rerun()
 
+    # ==================== CHAMADA DO TUTORIAL ====================
+    # Renderiza o overlay do tutorial se a função existir e estiver ativa
+    if "render_tutorial_overlay" in globals():
+        render_tutorial_overlay()
+    # =============================================================
+
+# =======================================================================
+# = Definição GLOBAL da variável steps_content (Necessária para on_nav_change) =
+# =======================================================================
+# (SE VOCÊ REMOVEU O TUTORIAL, PODE REMOVER ESTA DEFINIÇÃO GLOBAL TAMBÉM)
+if "render_tutorial_overlay" in globals():
+    steps_content = {
+        0: { "page": "Dashboard", "title": "👋 Bem-vindo(a) ao FitPro!", "text": "Sou seu assistente! Vamos fazer um tour rápido pelas funções principais? Leva só um minuto.", "next_step": 1, "next_page": "Dashboard", "next_button": "Sim, começar!", "show_skip": True },
+        1: { "page": "Dashboard", "title": "🏠 Seu Dashboard", "text": "Aqui você vê um resumo do seu dia e progresso. O primeiro passo é gerar seu plano personalizado. Vamos para o **Questionário**?\n\n*Clique no botão abaixo para ir automaticamente.*", "next_step": 2, "next_page": "Questionário", "next_button": "Próximo (Ir para Questionário)", "show_skip": True },
+        2: { "page": "Questionário", "title": "📋 O Questionário", "text": "Responda estas perguntas sobre você, seus objetivos e restrições. Com base nisso, geraremos um plano de treino exclusivo!\n\n*Preencha o formulário e clique em 'Gerar Plano Personalizado'. Depois, clique em 'Próximo' aqui.*", "next_step": 3, "next_page": "Meu Treino", "next_button": "Próximo (Plano Gerado)", "show_skip": True },
+        3: { "page": "Meu Treino", "title": "💪 Seu Plano de Treino", "text": "Aqui está seu plano! Explore os dias de treino, veja os exercícios e assista aos vídeos de execução clicando neles.\n\n*Quando quiser treinar, você pode marcar um dia como 'Treinado' aqui ou ir para 'Registrar Treino' para mais detalhes (ou usar o modo interativo!).*", "next_step": 4, "next_page": "Meu Treino", "next_button": "Entendido!", "show_skip": True },
+        4: { "page": "Meu Treino", "title": "🚀 Pronto para Começar!", "text": "Você aprendeu o básico! Explore outras seções como **Ranking**, **Progresso**, **Fotos** e **Rede Social**.\n\nBom treino!", "next_step": None, "next_page": None, "next_button": "Concluir Tutorial", "show_skip": False }
+    }
+# =======================================================================
+def render_tutorial_overlay():
+    """Renderiza a caixa de informações do passo atual do tutorial."""
+    if not st.session_state.get('tutorial_active', False):
+        return # Não faz nada se o tutorial não estiver ativo
+
+    step = st.session_state.get('tutorial_step', 0)
+    current_page = st.session_state.get('selected_page', 'Dashboard')
+
+    # Define o conteúdo de cada passo
+    # Certifique-se que a variável global 'steps_content' existe
+    if 'steps_content' not in globals():
+        st.error("Erro interno: Definição dos passos do tutorial não encontrada.")
+        return # Evita erro se steps_content não for global
+
+    step_data = steps_content.get(step)
+
+    # Verifica se o passo atual corresponde à página atual OU se é o passo inicial/final
+    # Permite mostrar o passo 0 (Boas-vindas) e o último passo em qualquer página para flexibilidade
+    if not step_data or (step_data["page"] != current_page and step != 0 and step_data["next_step"] is not None):
+        # Oculta o tutorial se o usuário estiver na página errada (exceto no início/fim)
+        return
+
+    # Renderiza a caixa do tutorial
+    # Usar st.container() pode conflitar com layouts existentes, st.info() ou st.markdown pode ser mais seguro
+    st.markdown("---") # Separador visual
+    container = st.container(border=True) # Usa container com borda
+    with container:
+        st.subheader(f"✨ Assistente FitPro ({step + 1}/{len(steps_content)})")
+        st.markdown(f"**{step_data['title']}**")
+        st.write(step_data["text"])
+
+        cols_buttons = st.columns([2, 1])
+        with cols_buttons[0]: # Botão Principal (Próximo/Concluir)
+            if step_data["next_step"] is not None:
+                st.button(step_data["next_button"],
+                          key=f"tutorial_next_{step}",
+                          type="primary",
+                          on_click=update_tutorial_step, # Chama a função de callback
+                          args=(step_data["next_step"], step_data["next_page"])) # Passa os argumentos
+            else: # Último passo
+                st.button(step_data["next_button"],
+                          key=f"tutorial_complete_{step}",
+                          type="primary",
+                          on_click=complete_tutorial) # Chama a função de callback
+
+        with cols_buttons[1]: # Botão Pular
+            if step_data["show_skip"]:
+                st.button("Pular Tutorial",
+                          key=f"tutorial_skip_{step}",
+                          on_click=skip_tutorial) # Chama a função de callback
+    st.markdown("---") # Separador visual
 
 # ==========================================================
 # =           INÍCIO - NOVA FUNÇÃO: MONTAR TREINO VIP      =
@@ -5988,7 +6232,3 @@ def main():
 # EXECUTAR APENAS UMA VEZ
 if __name__ == "__main__":
     main()
-
-
-
-
