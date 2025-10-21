@@ -2748,9 +2748,6 @@ def verificar_credenciais_firebase(username_or_email: str, senha: str) -> (bool,
         st.error(f"Erro inesperado durante a autenticação: {e}") # Log mais detalhado
         return False, f"Erro ao autenticar. Tente novamente mais tarde."
 
-
-
-def fazer_logout():
     """Função dedicada para fazer logout de forma limpa"""
     try:
         # LIMPAR COOKIES (IMPORTANTE!)
@@ -3259,8 +3256,21 @@ def render_auth():
     st.stop() # Mantém o stop
 
 
-def fazer_logout():
-    """Função dedicada para fazer logout de forma limpa"""
+def logout_callback():
+    """
+    Função de callback para on_click, unificando salvar e logout.
+    Executa antes do rerun automático do Streamlit.
+    """
+    user_uid = st.session_state.get('user_uid')
+
+    # 1. Salvar dados (lógica que estava no if st.button)
+    if user_uid:
+        try:
+            salvar_dados_usuario_firebase(user_uid)
+        except Exception as e:
+            print(f"Erro ao salvar dados no logout: {e}")
+
+    # 2. Fazer logout (lógica da antiga função fazer_logout)
     try:
         # Limpar cookies
         if 'user_uid' in cookies:
@@ -3278,16 +3288,13 @@ def fazer_logout():
 
         # Garantir que os defaults sejam resetados
         ensure_session_defaults()
-
-        # Debug opcional (pode remover depois)
-        print("✅ Logout realizado com sucesso")
+        print("✅ Logout callback executado com sucesso")
 
     except Exception as e:
-        print(f"❌ Erro durante logout: {e}")
+        print(f"❌ Erro durante logout callback: {e}")
         # Forçar limpeza mesmo com erro
         st.session_state.clear()
         ensure_session_defaults()
-
 # [MODIFICADO] Função render_main com a nova "Biblioteca VIP"
 def render_main():
     # ========== VERIFICAÇÃO DO SETTINGS ==========
@@ -3340,14 +3347,13 @@ def render_main():
 
     with col_header3:
         st.write("")  # Espaçamento
-        # ==================== CHAVE ESTÁTICA ====================
-        if st.button("🚪 Sair", use_container_width=True, key="main_btn_sair"):
-            # =======================================================
-            if user_uid:
-                salvar_dados_usuario_firebase(user_uid)
-            fazer_logout();
-            time.sleep(0.5);
-            st.rerun()
+        # ==================== CORREÇÃO APLICADA ====================
+        st.button("🚪 Sair",
+                  use_container_width=True,
+                  key="main_btn_sair",
+                  on_click=logout_callback  # <-- Usar o callback on_click
+                  )
+        # ==========================================================
 
     # ========== MENU DE NAVEGAÇÃO ==========
     st.markdown("---")
