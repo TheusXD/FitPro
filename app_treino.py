@@ -2992,8 +2992,13 @@ def gerar_plano_personalizado(dados_usuario: Dict[str, Any], fase_atual: Optiona
 
         for ex in exercicios_finais:
             exercicios_selecionados.append(
-                {'Exercício': ex, 'Séries': series_final, 'Repetições': reps_base, 'Descanso': descanso_base})
-
+                {
+                    'id': f"ex_{uuid.uuid4().hex[:8]}",  # <-- ADICIONE ESTA LINHA
+                    'Exercício': ex,
+                    'Séries': series_final,
+                    'Repetições': reps_base,
+                    'Descanso': descanso_base
+                })
         return exercicios_selecionados if exercicios_finais else []
 
     # --- LÓGICA DE GERAÇÃO ---
@@ -5142,7 +5147,7 @@ def render_meu_treino():
     st.success(
         f"📊 Seu plano tem **{len(dias_validos)} dias** de treino com **{total_exercicios} exercícios** no total.")
 
-    # Botões de ação - AGORA FUNCIONANDO CORRETAMENTE
+    # Botões de ação
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🔄 Regenerar Plano", type="secondary", use_container_width=True):
@@ -5175,31 +5180,22 @@ def render_meu_treino():
     for nome_treino in dias_validos:
         treino_data = plano[nome_treino]
 
-        # CORREÇÃO: Substituir a verificação booleana problemática
         if treino_data is None:
             continue
+        if isinstance(treino_data, pd.DataFrame) and treino_data.empty:
+            continue
+        if isinstance(treino_data, list) and len(treino_data) == 0:
+            continue
 
-        # Verificação específica para DataFrame vazio
-        if isinstance(treino_data, pd.DataFrame):
-            if treino_data.empty:
-                continue
-        # Verificação específica para lista vazia
-        elif isinstance(treino_data, list):
-            if len(treino_data) == 0:
-                continue
-
-        # Converter para DataFrame se for lista
         if isinstance(treino_data, list):
             df_treino = pd.DataFrame(treino_data)
         else:
             df_treino = treino_data
 
-        # CORREÇÃO: Verificar se o DataFrame resultante não está vazio
         if df_treino.empty or 'Exercício' not in df_treino.columns:
             continue
 
         col_header, col_action = st.columns([3, 1])
-
         with col_header:
             st.subheader(nome_treino)
             st.caption(f"{len(df_treino)} exercícios")
@@ -5227,6 +5223,12 @@ def render_meu_treino():
             repeticoes = row.get('Repetições', 'N/A')
             descanso = row.get('Descanso', 'N/A')
 
+            # ================== CORREÇÃO ESTÁ AQUI ==================
+            # Pega o ID único do exercício. Se não existir (planos antigos),
+            # usa o 'index' como último recurso.
+            ex_id = row.get('id', f"fallback_{index}")
+            # ========================================================
+
             with st.expander(f"**{exercicio}** | {series} Séries x {repeticoes} Reps"):
                 col_media, col_instr = st.columns([1, 2])
 
@@ -5238,22 +5240,21 @@ def render_meu_treino():
                     else:
                         st.info("Vídeo de execução indisponível.")
 
-                    st.markdown("---")  # Separador visual
+                    st.markdown("---")
 
                     # --- LÓGICA DO BOTÃO DE TROCA ---
                     if user_role in ['vip', 'admin']:
-                        # Chave única para o botão
-                        btn_key = f"swap_ex_{nome_treino.replace(' ', '_')}_{index}"
+
+                        # Agora a variável 'ex_id' existe e a chave será criada corretamente
+                        btn_key = f"swap_ex_{nome_treino.replace(' ', '_')}_{ex_id}"
 
                         if st.button("🔄 Trocar Exercício (VIP)", key=btn_key, use_container_width=True):
-                            # Chama a função de troca que já existe!
                             trocar_exercicio(nome_treino, index, exercicio)
                             st.rerun()
                     else:
                         # CTA (Call to Action) para não-VIPs
-                        cta_key = f"cta_swap_{nome_treino.replace(' ', '_')}_{index}"
+                        cta_key = f"cta_swap_{nome_treino.replace(' ', '_')}_{ex_id}"  # Use ex_id aqui também
                         if st.button("🔄 Trocar Exercício (⭐ VIP)", key=cta_key, use_container_width=True):
-                        # =======================================================
                             st.session_state.selected_page = "Solicitar VIP"
                             st.rerun()
 
