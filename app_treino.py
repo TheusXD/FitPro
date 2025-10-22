@@ -29,11 +29,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 from itertools import cycle
 import uuid
-logout_key = f"logout_{uuid.uuid4().hex[:8]}"
-nav_key = f"nav_select_{uuid.uuid4().hex[:8]}"
-theme_key = f"theme_select_{uuid.uuid4().hex[:8]}"
-notify_key = f"notify_check_{uuid.uuid4().hex[:8]}"
-error_key = f"error_btn_{uuid.uuid4().hex[:8]}"
+
 
 # Adicione no topo do arquivo com os outros imports
 import uuid
@@ -2319,7 +2315,7 @@ def carregar_dados_usuario_firebase(uid: str):
         st.session_state['settings'] = {**settings_atuais, **settings_carregadas}
 
         st.session_state['ciclo_atual'] = data.get('ciclo_atual')
-
+        st.session_state['tutorial_completed'] = data.get('tutorial_completed', False)
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
         # Em caso de erro, garante que o plano seja None
@@ -2404,9 +2400,15 @@ def salvar_dados_usuario_firebase(uid: str):
             # Prepara os outros dados que mudam frequentemente
             freq = []
             for d in st.session_state.get('frequencia', []):
-                 if isinstance(d, date) and not isinstance(d, datetime):
-                     freq.append(datetime.combine(d, datetime.min.time()))
-                 elif isinstance(d, datetime): freq.append(d)
+                if isinstance(d, date) and not isinstance(d, datetime):
+                    # ADICIONE O TZINFO AQUI
+                    freq.append(datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc))
+                elif isinstance(d, datetime):
+                    # Se já for datetime, garanta que tenha fuso
+                    if d.tzinfo is None:
+                        freq.append(d.replace(tzinfo=timezone.utc))
+                    else:
+                        freq.append(d)
 
             # Garante que timestamps e datas estão no formato correto para Firestore
             hist = []
@@ -2419,14 +2421,14 @@ def salvar_dados_usuario_firebase(uid: str):
                          try:
                              copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
                          # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                         except ValueError:
+                         except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                              pass # Mantém como string se inválido
                          # =============================================================
                  if 'timestamp' in copy and isinstance(copy['timestamp'], str):
                      try:
                          copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
                      # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                     except ValueError:
+                     except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                           pass # Mantém como string se inválido
                      # =============================================================
                  hist.append(copy)
@@ -2440,14 +2442,14 @@ def salvar_dados_usuario_firebase(uid: str):
                          try:
                              copy['prazo'] = datetime.fromisoformat(copy['prazo'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
                          # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                         except ValueError:
+                         except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                              copy['prazo'] = None
                          # =============================================================
                  if 'data_criacao' in copy and isinstance(copy['data_criacao'], str):
                      try:
                          copy['data_criacao'] = datetime.fromisoformat(copy['data_criacao']).replace(tzinfo=timezone.utc) # Adiciona UTC
                      # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                     except ValueError:
+                     except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                           pass
                      # =============================================================
                  metas_save.append(copy)
@@ -2459,7 +2461,7 @@ def salvar_dados_usuario_firebase(uid: str):
                      try:
                          copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
                      # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                     except ValueError:
+                     except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                          pass
                      # =============================================================
                  fotos_save.append(copy)
@@ -2473,14 +2475,14 @@ def salvar_dados_usuario_firebase(uid: str):
                          try:
                              copy['data'] = datetime.fromisoformat(copy['data'].split('T')[0]).replace(tzinfo=timezone.utc) # Adiciona UTC
                          # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                         except ValueError:
+                         except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                               pass
                          # =============================================================
                  if 'timestamp' in copy and isinstance(copy['timestamp'], str):
                      try:
                          copy['timestamp'] = datetime.fromisoformat(copy['timestamp']).replace(tzinfo=timezone.utc) # Adiciona UTC
                      # ==================== CORREÇÃO DE INDENTAÇÃO ====================
-                     except ValueError:
+                     except ValueError: # <-- INDENTAÇÃO CORRIGIDA
                           pass
                      # =============================================================
                  medidas_save.append(copy)
@@ -3312,16 +3314,19 @@ def render_main():
     if 'verificar_reset_semanal' in globals() and user_uid:
         verificar_reset_semanal(user_uid)
 
-    # ==================== ATIVAÇÃO DO TUTORIAL ====================
-    if not st.session_state.get('tutorial_completed', True) and \
-            not st.session_state.get('tutorial_active', False) and \
-            st.session_state.get('tutorial_step', 0) == 0 and \
-            'dados_usuario' in st.session_state:
+    # ==================== ATIVAÇÃO DO TUTORIAL (REPARO FINAL - SEM POP-UP) ====================
+    tutorial_deve_iniciar = (
+            not st.session_state.get('tutorial_completed', True) and
+            not st.session_state.get('tutorial_active', False) and
+            st.session_state.get('tutorial_step', 0) == 0 and
+            'dados_usuario' in st.session_state
+    )
+
+    if tutorial_deve_iniciar:
+        # Apenas ativa o tutorial. O aviso e os botões aparecerão mais abaixo.
         st.session_state.tutorial_active = True
-        st.info("Iniciando o tour guiado...")
-        time.sleep(1)
-        st.rerun()
-    # ======================================================================
+
+        # =========================================================================================
 
     # Verifica os modos ativos (Warmup, Workout, Cooldown)
     if 'render_warmup_session' in globals() and st.session_state.get('warmup_in_progress',
@@ -3347,11 +3352,11 @@ def render_main():
 
     with col_header3:
         st.write("")  # Espaçamento
-        # ==================== CORREÇÃO APLICADA ====================
+        # ==================== CORREÇÃO APLICADA (LOGOUT) ====================
         st.button("🚪 Sair",
                   use_container_width=True,
                   key="main_btn_sair",
-                  on_click=logout_callback  # <-- Usar o callback on_click
+                  on_click=logout_callback  # <-- Usa o callback on_click
                   )
         # ==========================================================
 
@@ -3400,6 +3405,16 @@ def render_main():
         disabled=st.session_state.get('tutorial_active', False)  # Desabilita se tutorial ativo
     )
 
+    # ==================== AVISO DE TUTORIAL ATIVO (Substitui o pop-up) ====================
+    if st.session_state.get('tutorial_active', False):
+        st.warning(
+            "✨ **Tour Guiado Ativo!**\n"
+            "Sua navegação está bloqueada. Role até o **fim da página** para "
+            "clicar em 'Próximo' ou 'Pular Tutorial'.",
+            icon="👇"
+        )
+    # ====================================================================================
+
     # ========== CONFIGURAÇÕES (COM ALTERAR SENHA) ==========
     with st.expander("⚙️ Configurações", icon="⚙️"):
         col_config1, col_config2 = st.columns(2)
@@ -3427,7 +3442,10 @@ def render_main():
                 if st.session_state.get('tutorial_active', False):
                     st.warning("Termine ou pule o tutorial atual primeiro.")
                 else:
-                    st.session_state.tutorial_active = True; st.session_state.tutorial_step = 0; st.session_state.selected_page = "Dashboard"; st.rerun()
+                    st.session_state.tutorial_active = True;
+                    st.session_state.tutorial_step = 0;
+                    st.session_state.selected_page = "Dashboard";
+                    st.rerun()
 
         # ==================== SEÇÃO: ALTERAR SENHA ====================
         st.markdown("---")
@@ -3518,7 +3536,6 @@ def render_main():
     if "render_tutorial_overlay" in globals():
         render_tutorial_overlay()
     # =============================================================
-
 # =======================================================================
 # = Definição GLOBAL da variável steps_content (Necessária para on_nav_change) =
 # =======================================================================
@@ -3681,18 +3698,26 @@ def render_build_workout():
                     st.write("Nenhum exercício adicionado a este dia ainda.")
                 else:
                     st.write("**Exercícios:**")
-                    for index, ex_dict in enumerate(exercises_in_day):
+                    # Usar um loop 'for' reverso para exclusão segura
+                    for index in range(len(exercises_in_day) - 1, -1, -1):
+                        ex_dict = exercises_in_day[index]
+                        ex_id = ex_dict.get('id', f"fallback_{index}")  # Pega o I
+
                         cols_ex = st.columns([4, 1, 1, 1, 1])
                         cols_ex[0].write(f"- {ex_dict.get('Exercício', 'N/A')}")
                         cols_ex[1].caption(f"S: {ex_dict.get('Séries', 'N/A')}")
                         cols_ex[2].caption(f"R: {ex_dict.get('Repetições', 'N/A')}")
                         cols_ex[3].caption(f"D: {ex_dict.get('Descanso', 'N/A')}")
-                        # Botão para excluir exercício específico
-                        if cols_ex[4].button("❌", key=f"build_delete_ex_{workout_name}_{index}",
-                                             help="Remover este exercício"):
+
+                        # ==================== REPARO APLICADO ====================
+                        # Chave mais estável
+                        ex_name_safe = ex_dict.get('Exercício', 'N/A').replace(' ', '_')
+                        btn_key = f"build_delete_ex_{workout_name}_{ex_id}"
+
+                        if cols_ex[4].button("❌", key=btn_key, help="Remover este exercício"):
                             builder_state[workout_name].pop(index)
                             st.rerun()
-                            st.stop()  # Interrompe para evitar erro de índice
+                            st.stop()
 
                 st.markdown("---")
 
@@ -3716,6 +3741,7 @@ def render_build_workout():
                     if submitted:
                         if selected_exercise and sets and reps and rest:
                             new_exercise_dict = {
+                                'id': f"ex_{uuid.uuid4().hex[:8]}",  # <-- ADICIONE ESTA LINHA
                                 'Exercício': selected_exercise,
                                 'Séries': sets,
                                 'Repetições': reps,
@@ -3723,7 +3749,7 @@ def render_build_workout():
                             }
                             builder_state[workout_name].append(new_exercise_dict)
                             st.success(f"'{selected_exercise}' adicionado a '{workout_name}'.")
-                            st.rerun()  # Atualiza a lista no expander
+                            st.rerun()
                         else:
                             st.error("Preencha todos os campos do exercício.")
 
@@ -4969,18 +4995,19 @@ def verificar_treino_do_dia():
 def render_questionario():
     st.title("📋 Questionário de Perfil")
 
-    # ==================== CORREÇÃO AQUI ====================
-    # Chave estática para o formulário
-    form_key = "f_questionario"
+    # ==================== REPARO APLICADO ====================
+    # 1. Garantir que o "flag" de sucesso exista no estado
+    if 'plano_gerado_sucesso' not in st.session_state:
+        st.session_state.plano_gerado_sucesso = False
     # ========================================================
+
+    form_key = "f_questionario"
 
     with st.form(form_key):
         st.subheader("Informações Pessoais")
 
         col1, col2 = st.columns(2)
         with col1:
-            # ==================== CORREÇÃO AQUI ====================
-            # Chaves estáticas para cada widget
             nome = st.text_input("Nome Completo*", key="q_nome")
             idade = st.number_input("Idade*", min_value=12, max_value=100, key="q_idade")
             altura = st.number_input("Altura (cm)*", min_value=100, max_value=250, key="q_altura")
@@ -5020,10 +5047,10 @@ def render_questionario():
         observacoes = st.text_area("Observações adicionais", key="q_obs")
 
         if st.form_submit_button("🎯 Gerar Plano Personalizado", key="q_btn_submit"):
-        # ========================================================
             # Validar campos obrigatórios
             if not all([nome, idade, altura, peso]):
                 st.error("Por favor, preencha todos os campos obrigatórios (*)")
+                st.session_state.plano_gerado_sucesso = False  # Garante que o flag é falso
             else:
                 # Salvar dados do usuário
                 dados_usuario = {
@@ -5055,16 +5082,29 @@ def render_questionario():
                 st.success("🎉 Plano gerado com sucesso!")
                 st.info("Acesse a página 'Meu Treino' para ver seu plano personalizado.")
 
-                # ==================== CORREÇÃO AQUI ====================
-                if st.button("👀 Ver Meu Treino", key="q_btn_ver_treino"):
+                # ==================== REPARO APLICADO ====================
+                # 2. Definir o flag de sucesso
+                st.session_state.plano_gerado_sucesso = True
+                # REMOVEMOS o st.button daqui de dentro
                 # ========================================================
-                    st.session_state.selected_page = "Meu Treino"
-                    st.rerun()
+
+    # <--- FIM DO BLOCO "with st.form(form_key):"
+
+    # ==================== REPARO APLICADO ====================
+    # 3. O botão agora está FORA do formulário
+    # Ele só aparece se o flag for Verdadeiro
+    if st.session_state.get('plano_gerado_sucesso', False):
+
+        if st.button("👀 Ver Meu Treino", key="q_btn_ver_treino"):
+            st.session_state.plano_gerado_sucesso = False  # Reseta o flag
+            st.session_state.selected_page = "Meu Treino"
+            st.rerun()
+    # ========================================================
 
 
 def render_meu_treino():
     st.title("💪 Meu Treino Personalizado")
-
+    user_role = st.session_state.get('role', 'free')
     if not st.session_state.get('plano_treino'):
         st.warning("📝 Você ainda não tem um plano de treino gerado.")
         st.info("Vá para a página 'Questionário' para gerar seu plano personalizado!")
@@ -5197,6 +5237,25 @@ def render_meu_treino():
                         st.caption(f"Abre o vídeo de {exercicio} no YouTube")
                     else:
                         st.info("Vídeo de execução indisponível.")
+
+                    st.markdown("---")  # Separador visual
+
+                    # --- LÓGICA DO BOTÃO DE TROCA ---
+                    if user_role in ['vip', 'admin']:
+                        # Chave única para o botão
+                        btn_key = f"swap_ex_{nome_treino.replace(' ', '_')}_{index}"
+
+                        if st.button("🔄 Trocar Exercício (VIP)", key=btn_key, use_container_width=True):
+                            # Chama a função de troca que já existe!
+                            trocar_exercicio(nome_treino, index, exercicio)
+                            st.rerun()
+                    else:
+                        # CTA (Call to Action) para não-VIPs
+                        cta_key = f"cta_swap_{nome_treino.replace(' ', '_')}_{index}"
+                        if st.button("🔄 Trocar Exercício (⭐ VIP)", key=cta_key, use_container_width=True):
+                        # =======================================================
+                            st.session_state.selected_page = "Solicitar VIP"
+                            st.rerun()
 
                 with col_instr:
                     st.markdown("##### 📋 Instruções")
@@ -6001,34 +6060,31 @@ def render_metas():
     if not metas:
         st.info("Você ainda não tem metas definidas.")
     else:
-        for i, meta in enumerate(metas):
+        # Usar um loop 'for' reverso para exclusão segura
+        for i in range(len(metas) - 1, -1, -1):
+            meta = metas[i]
+
+            # Criar uma chave única e estável
+            meta_id = meta.get('data_criacao', str(i))  # Usa data_criacao ou cai para o índice
+
             with st.expander(f"🎯 {meta.get('descricao', 'Meta sem descrição')}"):
                 col1, col2, col3 = st.columns([3, 1, 1])
-
-                with col1:
-                    st.write(f"**Tipo:** {meta.get('tipo', 'N/A')}")
-                    if meta.get('valor_alvo'):
-                        st.write(f"**Alvo:** {meta.get('valor_alvo')}")
-                    if meta.get('prazo'):
-                        prazo_dt = date.fromisoformat(meta['prazo']) if isinstance(meta['prazo'], str) else meta[
-                            'prazo']
-                        dias_restantes = (prazo_dt - date.today()).days
-                        st.write(f"**Prazo:** {prazo_dt.strftime('%d/%m/%Y')} ({dias_restantes} dias)")
-
+                # ... (código de exibição) ...
                 with col2:
-                    # ==================== CORREÇÃO AQUI ====================
-                    # Chave dinâmica, mas consistente baseada no índice 'i'
-                    if st.button("✅", key=f"metas_btn_concluir_{i}"):
-                    # ========================================================
+                    # ==================== REPARO APLICADO ====================
+                    if st.button("✅", key=f"metas_btn_concluir_{meta_id}"):
+                        # ========================================================
                         meta['status'] = 'concluída'
                         salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
                         st.rerun()
 
                 with col3:
-                    # ==================== CORREÇÃO AQUI ====================
-                    if st.button("🗑️", key=f"metas_btn_excluir_{i}"):
-                    # ========================================================
-                        metas.pop(i)
+                    # ==================== REPARO APLICADO ====================
+                    if st.button("🗑️", key=f"metas_btn_excluir_{meta_id}"):
+                        # ========================================================
+                        metas.pop(i)  # 'pop(i)' funciona bem com o loop reverso
+                        salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
+                        st.rerun()
                         salvar_dados_usuario_firebase(st.session_state.get('user_uid'))
                         st.rerun()
 
